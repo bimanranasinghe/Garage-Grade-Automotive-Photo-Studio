@@ -1,0 +1,1613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Garage Grade — Photo Editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0b0d;
+    --panel:#131519;
+    --panel-2:#1a1d22;
+    --line:#26292f;
+    --text:#e9eaec;
+    --text-dim:#8b9099;
+    --red:#c8283f;
+    --amber:#e8a33d;
+    --silver:#aeb4bd;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;}
+  body{min-height:100vh;}
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:16px 20px;border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,#101215,#0a0b0d);
+    position:sticky;top:0;z-index:10;
+  }
+  .brand{display:flex;align-items:center;gap:10px;}
+  .brand .mark{width:10px;height:22px;background:linear-gradient(180deg,var(--red),var(--amber));border-radius:2px;}
+  .brand h1{font-family:'Oswald',sans-serif;font-weight:700;font-size:18px;letter-spacing:0.5px;margin:0;text-transform:uppercase;}
+  .brand span{color:var(--text-dim);font-size:11px;font-family:'JetBrains Mono',monospace;display:block;letter-spacing:0.5px;}
+  .dl-btn{
+    background:var(--red);color:#fff;border:none;padding:10px 18px;border-radius:6px;
+    font-family:'Oswald',sans-serif;font-weight:600;font-size:13px;letter-spacing:0.5px;
+    text-transform:uppercase;cursor:pointer;transition:background .15s;
+  }
+  .dl-btn:hover{background:#e12f49;}
+  .dl-btn:disabled{background:#3a2226;color:#7a5158;cursor:not-allowed;}
+
+  .layout{display:flex;flex-direction:column;}
+  @media(min-width:900px){
+    .layout{flex-direction:row;align-items:flex-start;}
+    .stage{flex:1;min-width:0;}
+    .controls{width:360px;flex-shrink:0;border-left:1px solid var(--line);height:calc(100vh - 61px);overflow-y:auto;}
+  }
+
+  .stage{
+    display:flex;align-items:center;justify-content:center;
+    min-height:min(70vh,520px);padding:20px;position:relative;
+    background:
+      radial-gradient(circle at 50% 30%, #14161a 0%, #0a0b0d 70%);
+  }
+  .drop{
+    width:100%;max-width:520px;border:1.5px dashed #3a3e46;border-radius:var(--radius);
+    padding:40px 20px;text-align:center;color:var(--text-dim);cursor:pointer;
+    transition:border-color .15s,background .15s;
+  }
+  .drop:hover, .drop.drag{border-color:var(--amber);background:#161820;}
+  .drop svg{width:34px;height:34px;stroke:var(--text-dim);margin-bottom:10px;}
+  .drop b{color:var(--text);font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:0.5px;font-size:14px;}
+  .drop .hint{font-size:12px;margin-top:6px;font-family:'JetBrains Mono',monospace;}
+  input[type=file]{display:none;}
+
+  .canvas-wrap{position:relative;max-width:100%;display:none;}
+  .canvas-wrap.active{display:block;}
+  #view{max-width:100%;max-height:65vh;display:block;border-radius:4px;box-shadow:0 20px 60px rgba(0,0,0,.6);}
+  .frame-label{
+    position:absolute;top:-11px;left:14px;background:var(--bg);padding:0 8px;
+    font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--amber);letter-spacing:1px;
+  }
+  .change-img{
+    position:absolute;bottom:10px;right:10px;background:rgba(10,11,13,.8);
+    border:1px solid var(--line);color:var(--text-dim);padding:6px 10px;border-radius:6px;
+    font-size:11px;cursor:pointer;font-family:'JetBrains Mono',monospace;
+  }
+  .change-img:hover{color:var(--text);border-color:var(--amber);}
+
+  .controls{padding:18px;}
+  .section{margin-bottom:22px;}
+  .section-title{
+    font-family:'Oswald',sans-serif;text-transform:uppercase;font-size:12px;
+    letter-spacing:1.2px;color:var(--amber);margin:0 0 10px;
+    display:flex;align-items:center;gap:8px;
+  }
+  .section-title::after{content:'';flex:1;height:1px;background:var(--line);}
+
+  .presets{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .preset-btn{
+    background:var(--panel-2);border:1px solid var(--line);color:var(--text);
+    padding:10px 8px;border-radius:8px;font-size:12px;cursor:pointer;text-align:left;
+    transition:border-color .15s,background .15s;
+  }
+  .preset-btn b{display:block;font-family:'Oswald',sans-serif;font-size:12.5px;letter-spacing:.3px;text-transform:uppercase;}
+  .preset-btn small{color:var(--text-dim);font-size:10.5px;}
+  .preset-btn:hover{border-color:var(--amber);}
+  .preset-btn.active{border-color:var(--red);background:#1c1416;}
+
+  .slider-row{margin-bottom:14px;}
+  .slider-row label{
+    display:flex;justify-content:space-between;font-size:12px;color:var(--text-dim);
+    margin-bottom:6px;font-family:'JetBrains Mono',monospace;
+  }
+  .slider-row label span.val{color:var(--silver);}
+  input[type=range]{
+    -webkit-appearance:none;width:100%;height:3px;background:var(--line);border-radius:2px;outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:14px;height:14px;border-radius:50%;
+    background:var(--amber);cursor:pointer;border:2px solid #0a0b0d;
+  }
+  input[type=range]::-moz-range-thumb{
+    width:14px;height:14px;border-radius:50%;background:var(--amber);cursor:pointer;border:2px solid #0a0b0d;
+  }
+
+  .ratio-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
+  .ratio-btn{
+    background:var(--panel-2);border:1px solid var(--line);color:var(--text-dim);
+    padding:7px 12px;border-radius:6px;font-size:11.5px;cursor:pointer;font-family:'JetBrains Mono',monospace;
+  }
+  .ratio-btn.active{border-color:var(--amber);color:var(--amber);}
+
+  .size-btn{
+    background:var(--panel-2);border:1px solid var(--line);color:var(--text-dim);
+    padding:7px 12px;border-radius:6px;font-size:11.5px;cursor:pointer;font-family:'JetBrains Mono',monospace;
+  }
+  .size-btn.active{border-color:var(--amber);color:var(--amber);}
+
+  .text-row{display:flex;flex-direction:column;gap:8px;margin-bottom:6px;}
+  .text-row input[type=text]{
+    background:var(--panel-2);border:1px solid var(--line);color:var(--text);
+    padding:9px 10px;border-radius:6px;font-size:13px;font-family:'Inter',sans-serif;
+  }
+  .row-inline{display:flex;gap:8px;}
+  .row-inline select{
+    background:var(--panel-2);border:1px solid var(--line);color:var(--text);
+    padding:8px;border-radius:6px;font-size:12px;flex:1;font-family:'JetBrains Mono',monospace;
+  }
+  .swatch-input{width:38px;height:36px;padding:0;border:1px solid var(--line);border-radius:6px;background:var(--panel-2);cursor:pointer;}
+
+  .footnote{font-size:11px;color:#565a62;line-height:1.5;font-family:'JetBrains Mono',monospace;margin-top:6px;}
+  .reset-btn{
+    width:100%;background:transparent;border:1px solid var(--line);color:var(--text-dim);
+    padding:9px;border-radius:6px;font-size:12px;cursor:pointer;margin-top:4px;font-family:'JetBrains Mono',monospace;
+  }
+  .reset-btn:hover{color:var(--red);border-color:var(--red);}
+
+  .text-layer{border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:10px;background:var(--panel-2);}
+  .text-layer-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+  .text-layer-head span{font-size:10px;letter-spacing:1px;color:var(--text-dim);}
+  .remove-layer-btn{
+    background:transparent;border:1px solid var(--line);color:var(--text-dim);
+    padding:4px 9px;border-radius:6px;font-size:10.5px;cursor:pointer;font-family:'JetBrains Mono',monospace;
+  }
+  .remove-layer-btn:hover{color:var(--red);border-color:var(--red);}
+  .add-text-btn{
+    width:100%;background:var(--panel-2);border:1.5px dashed var(--line);color:var(--text-dim);
+    padding:10px;border-radius:8px;font-size:12px;cursor:pointer;font-family:'JetBrains Mono',monospace;
+    text-transform:uppercase;letter-spacing:.5px;
+  }
+  .add-text-btn:hover{border-color:var(--amber);color:var(--amber);}
+  .empty-hint{font-size:11.5px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;margin:0 0 10px;}
+
+  .tabs{display:flex;gap:2px;padding:0 20px;background:#101215;border-bottom:1px solid var(--line);overflow-x:auto;}
+  .tab-btn{
+    background:transparent;border:none;color:var(--text-dim);padding:13px 16px;white-space:nowrap;
+    font-family:'Oswald',sans-serif;text-transform:uppercase;font-size:12.5px;letter-spacing:.5px;
+    cursor:pointer;border-bottom:2px solid transparent;transition:color .15s,border-color .15s;
+  }
+  .tab-btn:hover{color:var(--text);}
+  .tab-btn.active{color:var(--amber);border-bottom-color:var(--amber);}
+
+  .view{display:none;}
+  .view.active{display:block;}
+
+  .meta-drop-wrap{padding:20px;max-width:900px;margin:0 auto;}
+  .meta-list{padding:0 20px;max-width:900px;margin:0 auto 20px;display:flex;flex-direction:column;gap:10px;}
+  .meta-item{display:flex;gap:14px;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:12px;align-items:flex-start;}
+  .meta-thumb{width:60px;height:60px;object-fit:cover;border-radius:6px;flex-shrink:0;background:#000;}
+  .meta-thumb-ph{width:60px;height:60px;border-radius:6px;flex-shrink:0;background:#1c1e22;border:1px solid var(--line);}
+  .meta-info{flex:1;min-width:0;}
+  .meta-name-row{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
+  .meta-name{font-family:'Oswald',sans-serif;font-size:13px;text-transform:uppercase;letter-spacing:.3px;word-break:break-all;}
+  .meta-name-input{
+    background:transparent;border:1px solid transparent;color:var(--text);
+    font-family:'Oswald',sans-serif;font-size:13px;letter-spacing:.3px;
+    padding:3px 6px;border-radius:5px;width:100%;margin:-3px 0 -3px -6px;
+  }
+  .meta-name-input:hover{border-color:var(--line);}
+  .meta-name-input:focus{outline:none;border-color:var(--amber);background:var(--panel);}
+  .meta-name-ext{font-size:10.5px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;margin-left:4px;}
+  .meta-size{font-size:10.5px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;margin-top:2px;}
+  .meta-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+  .meta-tag{font-size:10.5px;font-family:'JetBrains Mono',monospace;background:#1c1e22;border:1px solid var(--line);color:var(--silver);padding:3px 8px;border-radius:5px;}
+  .meta-tag.warn{color:var(--amber);border-color:#3a2f1c;}
+  .meta-none{font-size:11px;color:#4d8a5c;font-family:'JetBrains Mono',monospace;margin-top:8px;}
+  .meta-remove{
+    background:transparent;border:1px solid var(--line);color:var(--text-dim);
+    padding:5px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:'JetBrains Mono',monospace;flex-shrink:0;
+  }
+  .meta-remove:hover{color:var(--red);border-color:var(--red);}
+  .meta-mode-wrap{padding:0 20px;max-width:900px;margin:0 auto 16px;}
+  .meta-mode-row{display:flex;gap:8px;margin-bottom:12px;}
+  .meta-mode-btn{
+    flex:1;background:var(--panel-2);border:1px solid var(--line);color:var(--text-dim);
+    padding:10px 8px;border-radius:8px;font-size:12px;cursor:pointer;text-align:center;
+    font-family:'JetBrains Mono',monospace;transition:border-color .15s,background .15s;
+  }
+  .meta-mode-btn.active{border-color:var(--amber);color:var(--amber);background:#1c1712;}
+  .meta-fields{display:none;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:14px;}
+  .meta-fields.active{display:block;}
+  .meta-fields-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  @media(max-width:600px){.meta-fields-grid{grid-template-columns:1fr;}}
+  .meta-field label{display:block;font-size:10.5px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;margin-bottom:5px;letter-spacing:.3px;}
+  .meta-field input{
+    width:100%;background:var(--panel);border:1px solid var(--line);color:var(--text);
+    padding:8px 9px;border-radius:6px;font-size:12.5px;font-family:'Inter',sans-serif;
+  }
+  .meta-field input:focus{outline:none;border-color:var(--amber);}
+  .meta-field.full{grid-column:1 / -1;}
+  .meta-footer{
+    position:sticky;bottom:0;display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:14px 20px;border-top:1px solid var(--line);background:#101215;flex-wrap:wrap;
+  }
+  .meta-count{font-size:12px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;}
+  .meta-actions{display:flex;gap:10px;}
+  .clear-btn{
+    background:transparent;border:1px solid var(--line);color:var(--text-dim);padding:10px 16px;border-radius:6px;
+    font-family:'JetBrains Mono',monospace;font-size:12px;cursor:pointer;
+  }
+  .clear-btn:hover{color:var(--red);border-color:var(--red);}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="mark"></div>
+    <div>
+      <h1>Garage Grade</h1>
+      <span>PHOTO ENHANCE // USANIZONE</span>
+    </div>
+  </div>
+  <button class="dl-btn" id="downloadBtn" disabled>Export</button>
+</div>
+
+<div class="tabs">
+  <button class="tab-btn active" data-tab="editor">Photo Editor</button>
+  <button class="tab-btn" data-tab="meta">Metadata Remover</button>
+</div>
+
+<div class="view active" id="editorView">
+<div class="layout">
+  <div class="stage">
+    <div class="drop" id="dropZone">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <div><b>Drop your best-frame photo</b></div>
+      <div class="hint">Screenshot from TikTok / any JPG or PNG</div>
+    </div>
+    <div class="canvas-wrap" id="canvasWrap">
+      <span class="frame-label">PREVIEW</span>
+      <canvas id="view"></canvas>
+      <button class="change-img" id="changeImg">Change photo</button>
+    </div>
+    <input type="file" id="fileInput" accept="image/*">
+  </div>
+
+  <div class="controls">
+
+    <div class="section">
+      <div class="section-title">Look</div>
+      <div class="presets">
+        <button class="preset-btn" data-preset="none"><b>Original</b><small>no grade</small></button>
+        <button class="preset-btn" data-preset="cinematic"><b>Cinematic</b><small>teal &amp; orange</small></button>
+        <button class="preset-btn" data-preset="moody"><b>Moody Dark</b><small>deep contrast</small></button>
+        <button class="preset-btn" data-preset="chrome"><b>Chrome</b><small>cool silver</small></button>
+        <button class="preset-btn" data-preset="amg"><b>AMG Red</b><small>warm &amp; punchy</small></button>
+        <button class="preset-btn" data-preset="noir"><b>Noir</b><small>black &amp; white</small></button>
+        <button class="preset-btn" data-preset="sunset"><b>Sunset Glow</b><small>warm golden</small></button>
+        <button class="preset-btn" data-preset="street"><b>Street Night</b><small>dark &amp; gritty</small></button>
+        <button class="preset-btn" data-preset="clean"><b>Clean Bright</b><small>crisp &amp; light</small></button>
+        <button class="preset-btn" data-preset="vintage"><b>Vintage Film</b><small>faded warm</small></button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Adjust</div>
+      <div class="slider-row">
+        <label>Brightness <span class="val" id="v_bright">0</span></label>
+        <input type="range" id="s_bright" min="-40" max="40" value="0">
+      </div>
+      <div class="slider-row">
+        <label>Contrast <span class="val" id="v_contrast">0</span></label>
+        <input type="range" id="s_contrast" min="-40" max="60" value="0">
+      </div>
+      <div class="slider-row">
+        <label>Saturation <span class="val" id="v_sat">0</span></label>
+        <input type="range" id="s_sat" min="-100" max="60" value="0">
+      </div>
+      <div class="slider-row">
+        <label>Temperature <span class="val" id="v_temp">0</span></label>
+        <input type="range" id="s_temp" min="-40" max="40" value="0">
+      </div>
+      <div class="slider-row">
+        <label>Clarity / Detail <span class="val" id="v_clarity">0</span></label>
+        <input type="range" id="s_clarity" min="0" max="60" value="0">
+      </div>
+      <div class="slider-row">
+        <label>Vignette <span class="val" id="v_vig">0</span></label>
+        <input type="range" id="s_vig" min="0" max="60" value="0">
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Reframe</div>
+      <div class="ratio-row">
+        <button class="ratio-btn active" data-ratio="0">Original</button>
+        <button class="ratio-btn" data-ratio="1">1:1</button>
+        <button class="ratio-btn" data-ratio="0.8">4:5</button>
+        <button class="ratio-btn" data-ratio="1.7778">16:9</button>
+        <button class="ratio-btn" data-ratio="0.5625">9:16</button>
+      </div>
+      <div class="slider-row" id="panXRow" style="display:none;">
+        <label>Pan horizontal <span class="val" id="v_panx">50</span></label>
+        <input type="range" id="s_panx" min="0" max="100" value="50">
+      </div>
+      <div class="slider-row" id="panYRow" style="display:none;">
+        <label>Pan vertical <span class="val" id="v_pany">50</span></label>
+        <input type="range" id="s_pany" min="0" max="100" value="50">
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Text</div>
+      <div id="textLayersContainer"></div>
+      <div class="empty-hint" id="noTextHint">No text added yet.</div>
+      <button class="add-text-btn" id="addTextBtn">+ Add text</button>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Logo Watermark</div>
+      <div class="text-row">
+        <input type="file" id="logoInput" accept="image/*" style="display:none;">
+        <div class="row-inline">
+          <button class="preset-btn" id="logoUploadBtn" style="flex:1;text-align:center;"><b>Upload logo</b><small>PNG with transparent bg works best</small></button>
+        </div>
+        <div id="logoLoadedRow" style="display:none;">
+          <div class="row-inline" style="align-items:center;margin-top:4px;">
+            <select id="logoPos" style="flex:1;">
+              <option value="br">Bottom right</option>
+              <option value="bl">Bottom left</option>
+              <option value="tr">Top right</option>
+              <option value="tl">Top left</option>
+              <option value="center">Center</option>
+            </select>
+            <button class="ratio-btn" id="logoRemove" style="color:var(--red);border-color:var(--red);">Remove</button>
+          </div>
+          <div class="slider-row" style="margin-top:12px;margin-bottom:0;">
+            <label>Logo size <span class="val" id="v_logosize">20</span>%</label>
+            <input type="range" id="s_logosize" min="5" max="50" value="20">
+          </div>
+          <div class="slider-row" style="margin-bottom:0;">
+            <label>Logo opacity <span class="val" id="v_logoop">100</span></label>
+            <input type="range" id="s_logoop" min="10" max="100" value="100">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Export size</div>
+      <div class="ratio-row">
+        <button class="size-btn active" data-size="orig">Original</button>
+        <button class="size-btn" data-size="4k">Upscale to 4K</button>
+      </div>
+      <div class="footnote" id="sizeNote">Exports at the photo's native resolution.</div>
+      <div class="slider-row" style="margin-top:12px;margin-bottom:0;">
+        <label>File name</label>
+        <input type="text" id="exportName" value="garage-grade-export" spellcheck="false"
+          style="width:100%;background:var(--panel-2);border:1px solid var(--line);color:var(--text);padding:9px 10px;border-radius:6px;font-size:13px;font-family:'Inter',sans-serif;">
+      </div>
+    </div>
+
+    <button class="reset-btn" id="resetBtn">Reset all edits</button>
+    <div class="footnote">4K upscale uses progressive resampling plus a sharpen pass — best for source photos under ~2000px on the long edge.</div>
+  </div>
+</div>
+</div>
+
+<div class="view" id="metaView">
+  <div class="meta-drop-wrap">
+    <div class="drop" id="metaDropZone">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <div><b>Drop photos here</b></div>
+      <div class="hint">JPG / PNG — add as many as you like</div>
+    </div>
+    <input type="file" id="metaFileInput" accept="image/*" multiple>
+  </div>
+  <div class="meta-mode-wrap">
+    <div class="meta-mode-row">
+      <button class="meta-mode-btn active" id="modeStripBtn" data-mode="strip">Remove all metadata</button>
+      <button class="meta-mode-btn" id="modeCustomBtn" data-mode="custom">Set custom metadata</button>
+    </div>
+    <div class="meta-fields" id="metaFields">
+      <div class="meta-fields-grid">
+        <div class="meta-field"><label>Camera make</label><input type="text" id="metaMake" placeholder="e.g. Canon"></div>
+        <div class="meta-field"><label>Camera model</label><input type="text" id="metaModel" placeholder="e.g. EOS R6"></div>
+        <div class="meta-field"><label>Artist / Photographer</label><input type="text" id="metaArtist" placeholder="Your name"></div>
+        <div class="meta-field"><label>Copyright</label><input type="text" id="metaCopyright" placeholder="e.g. © 2026 Your Name"></div>
+        <div class="meta-field"><label>Date &amp; time taken</label><input type="datetime-local" id="metaDatetime"></div>
+        <div class="meta-field"><label>Software</label><input type="text" id="metaSoftware" placeholder="e.g. Garage Grade"></div>
+        <div class="meta-field full"><label>Description</label><input type="text" id="metaDesc" placeholder="Optional caption"></div>
+      </div>
+      <div class="footnote" style="margin-top:10px;">Leave a field blank to skip it. These values are written fresh — any original camera/GPS metadata is removed first, then only what you type here is added back.</div>
+    </div>
+  </div>
+  <div class="meta-list" id="metaList"></div>
+  <div class="meta-footer" id="metaFooter" style="display:none;">
+    <span class="meta-count" id="metaCount">0 photos</span>
+    <div class="meta-actions">
+      <button class="clear-btn" id="metaClearBtn">Clear all</button>
+      <button class="dl-btn" id="metaDownloadBtn">Strip Metadata &amp; Download ZIP</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const fileInput = document.getElementById('fileInput');
+const dropZone = document.getElementById('dropZone');
+const canvasWrap = document.getElementById('canvasWrap');
+const changeImg = document.getElementById('changeImg');
+const view = document.getElementById('view');
+const ctx = view.getContext('2d');
+const downloadBtn = document.getElementById('downloadBtn');
+
+// ---------- Tab switching ----------
+const tabButtons = document.querySelectorAll('.tab-btn');
+const editorViewEl = document.getElementById('editorView');
+const metaViewEl = document.getElementById('metaView');
+tabButtons.forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    tabButtons.forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    const tab = btn.dataset.tab;
+    editorViewEl.classList.toggle('active', tab === 'editor');
+    metaViewEl.classList.toggle('active', tab === 'meta');
+    downloadBtn.style.display = tab === 'editor' ? '' : 'none';
+  });
+});
+
+let img = new Image();
+let hasImage = false;
+let ratio = 0; // 0 = original
+let state = {
+  bright:0, contrast:0, sat:0, temp:0, clarity:0, vig:0,
+  panx:50, pany:50,
+  logoPos:'br', logoSizePct:20, logoOp:100
+};
+let logoImg = null;
+let exportSize = 'orig';
+let lastPreviewW = 1400, lastPreviewH = 1400;
+let textLayers = [];
+let textLayerIdSeq = 1;
+
+// ---------- Load image ----------
+function loadFile(file){
+  if(!file || !file.type.startsWith('image/')) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    img = new Image();
+    img.onload = () => {
+      hasImage = true;
+      dropZone.style.display = 'none';
+      canvasWrap.classList.add('active');
+      downloadBtn.disabled = false;
+      ratio = 0;
+      document.querySelectorAll('.ratio-btn').forEach(b=>b.classList.remove('active'));
+      document.querySelector('.ratio-btn[data-ratio="0"]').classList.add('active');
+      const nameField = document.getElementById('exportName');
+      if(nameField){
+        const base = file.name.replace(/\.[^./\\]+$/, '');
+        nameField.value = base || 'garage-grade-export';
+      }
+      render();
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+dropZone.addEventListener('click', ()=>fileInput.click());
+changeImg.addEventListener('click', ()=>fileInput.click());
+fileInput.addEventListener('change', e => loadFile(e.target.files[0]));
+
+['dragenter','dragover'].forEach(evt=>{
+  dropZone.addEventListener(evt, e=>{e.preventDefault();dropZone.classList.add('drag');});
+});
+['dragleave','drop'].forEach(evt=>{
+  dropZone.addEventListener(evt, e=>{e.preventDefault();dropZone.classList.remove('drag');});
+});
+dropZone.addEventListener('drop', e=>{
+  e.preventDefault();
+  loadFile(e.dataTransfer.files[0]);
+});
+
+// ---------- Presets ----------
+const PRESETS = {
+  none:    {bright:0, contrast:0, sat:0, temp:0, clarity:0, vig:0},
+  cinematic:{bright:-4, contrast:22, sat:-8, temp:8, clarity:18, vig:22},
+  moody:   {bright:-10, contrast:35, sat:-15, temp:-6, clarity:20, vig:38},
+  chrome:  {bright:6, contrast:18, sat:-20, temp:-18, clarity:22, vig:12},
+  amg:     {bright:2, contrast:28, sat:22, temp:14, clarity:24, vig:26},
+  noir:    {bright:-8, contrast:34, sat:-100, temp:-2, clarity:26, vig:34},
+  sunset:  {bright:4, contrast:14, sat:14, temp:26, clarity:14, vig:16},
+  street:  {bright:-14, contrast:30, sat:-6, temp:-10, clarity:22, vig:42},
+  clean:   {bright:10, contrast:8, sat:6, temp:-4, clarity:10, vig:4},
+  vintage: {bright:2, contrast:10, sat:-24, temp:16, clarity:8, vig:24}
+};
+
+document.querySelectorAll('.preset-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.preset-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    const p = PRESETS[btn.dataset.preset];
+    Object.assign(state, p);
+    syncSliders();
+    render();
+  });
+});
+
+function syncSliders(){
+  document.getElementById('s_bright').value = state.bright;
+  document.getElementById('s_contrast').value = state.contrast;
+  document.getElementById('s_sat').value = state.sat;
+  document.getElementById('s_temp').value = state.temp;
+  document.getElementById('s_clarity').value = state.clarity;
+  document.getElementById('s_vig').value = state.vig;
+  document.getElementById('v_bright').textContent = state.bright;
+  document.getElementById('v_contrast').textContent = state.contrast;
+  document.getElementById('v_sat').textContent = state.sat;
+  document.getElementById('v_temp').textContent = state.temp;
+  document.getElementById('v_clarity').textContent = state.clarity;
+  document.getElementById('v_vig').textContent = state.vig;
+}
+
+// ---------- Slider bindings ----------
+function bindSlider(id, key, label){
+  const el = document.getElementById(id);
+  el.addEventListener('input', ()=>{
+    state[key] = parseFloat(el.value);
+    document.getElementById(label).textContent = el.value;
+    document.querySelectorAll('.preset-btn').forEach(b=>b.classList.remove('active'));
+    render();
+  });
+}
+bindSlider('s_bright','bright','v_bright');
+bindSlider('s_contrast','contrast','v_contrast');
+bindSlider('s_sat','sat','v_sat');
+bindSlider('s_temp','temp','v_temp');
+bindSlider('s_clarity','clarity','v_clarity');
+bindSlider('s_vig','vig','v_vig');
+bindSlider('s_panx','panx','v_panx');
+bindSlider('s_pany','pany','v_pany');
+
+// ---------- Text layers (multiple, addable/removable) ----------
+function escapeAttr(str){
+  return String(str).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function addTextLayer(){
+  textLayers.push({id: textLayerIdSeq++, text:'', pos:'br', color:'#ffffff', size:28, opacity:85});
+  renderTextLayerUI();
+  render();
+}
+
+function renderTextLayerUI(){
+  const container = document.getElementById('textLayersContainer');
+  const hint = document.getElementById('noTextHint');
+  container.innerHTML = '';
+  hint.style.display = textLayers.length ? 'none' : 'block';
+
+  textLayers.forEach((layer, idx)=>{
+    const div = document.createElement('div');
+    div.className = 'text-layer';
+    div.innerHTML = `
+      <div class="text-layer-head">
+        <span>TEXT ${idx+1}</span>
+        <button class="remove-layer-btn" type="button" data-remove="${layer.id}">Remove</button>
+      </div>
+      <div class="text-row">
+        <input type="text" data-field="text" data-id="${layer.id}" placeholder="e.g. @USAniZone" value="${escapeAttr(layer.text)}">
+        <div class="row-inline">
+          <select data-field="pos" data-id="${layer.id}">
+            <option value="br">Bottom right</option>
+            <option value="bl">Bottom left</option>
+            <option value="tr">Top right</option>
+            <option value="tl">Top left</option>
+            <option value="center">Center</option>
+          </select>
+          <input type="color" class="swatch-input" data-field="color" data-id="${layer.id}" value="${layer.color}">
+        </div>
+        <div class="slider-row" style="margin-bottom:0;">
+          <label>Size <span class="val" data-sizeval="${layer.id}">${layer.size}</span></label>
+          <input type="range" min="12" max="72" value="${layer.size}" data-field="size" data-id="${layer.id}">
+        </div>
+        <div class="slider-row" style="margin-bottom:0;">
+          <label>Opacity <span class="val" data-opval="${layer.id}">${layer.opacity}</span></label>
+          <input type="range" min="10" max="100" value="${layer.opacity}" data-field="opacity" data-id="${layer.id}">
+        </div>
+      </div>
+    `;
+    container.appendChild(div);
+    div.querySelector('select[data-field="pos"]').value = layer.pos;
+  });
+
+  container.querySelectorAll('[data-field]').forEach(el=>{
+    el.addEventListener('input', ()=>{
+      const id = parseInt(el.dataset.id, 10);
+      const field = el.dataset.field;
+      const layer = textLayers.find(l=>l.id === id);
+      if(!layer) return;
+      if(field === 'size' || field === 'opacity'){
+        layer[field] = parseFloat(el.value);
+        const span = container.querySelector(`[data-${field==='size'?'sizeval':'opval'}="${id}"]`);
+        if(span) span.textContent = el.value;
+      } else {
+        layer[field] = el.value;
+      }
+      render();
+    });
+  });
+
+  container.querySelectorAll('.remove-layer-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = parseInt(btn.dataset.remove, 10);
+      textLayers = textLayers.filter(l=>l.id !== id);
+      renderTextLayerUI();
+      render();
+    });
+  });
+}
+
+document.getElementById('addTextBtn').addEventListener('click', addTextLayer);
+renderTextLayerUI();
+
+// ---------- Ratio ----------
+document.querySelectorAll('.ratio-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.ratio-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    ratio = parseFloat(btn.dataset.ratio);
+    const showPan = ratio !== 0;
+    document.getElementById('panXRow').style.display = showPan ? 'block' : 'none';
+    document.getElementById('panYRow').style.display = showPan ? 'block' : 'none';
+    render();
+  });
+});
+
+// ---------- Logo watermark ----------
+const logoInput = document.getElementById('logoInput');
+const logoUploadBtn = document.getElementById('logoUploadBtn');
+const logoLoadedRow = document.getElementById('logoLoadedRow');
+
+logoUploadBtn.addEventListener('click', ()=>logoInput.click());
+logoInput.addEventListener('change', e=>{
+  const file = e.target.files[0];
+  if(!file || !file.type.startsWith('image/')) return;
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    const im = new Image();
+    im.onload = ()=>{
+      logoImg = im;
+      logoLoadedRow.style.display = 'block';
+      logoUploadBtn.querySelector('b').textContent = 'Change logo';
+      render();
+    };
+    im.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+document.getElementById('logoRemove').addEventListener('click', ()=>{
+  logoImg = null;
+  logoLoadedRow.style.display = 'none';
+  logoUploadBtn.querySelector('b').textContent = 'Upload logo';
+  logoInput.value = '';
+  render();
+});
+
+document.getElementById('logoPos').addEventListener('change', e=>{state.logoPos = e.target.value; render();});
+bindSlider('s_logosize','logoSizePct','v_logosize');
+bindSlider('s_logoop','logoOp','v_logoop');
+
+// ---------- Export size toggle ----------
+document.querySelectorAll('.size-btn[data-size]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.size-btn[data-size]').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    exportSize = btn.dataset.size;
+    document.getElementById('sizeNote').textContent = exportSize === '4k'
+      ? 'Exports upscaled to a 3840px long edge with detail sharpening.'
+      : "Exports at the photo's native resolution.";
+  });
+});
+
+document.getElementById('resetBtn').addEventListener('click', ()=>{
+  state = {bright:0, contrast:0, sat:0, temp:0, clarity:0, vig:0, panx:50, pany:50,
+    logoPos:'br', logoSizePct:20, logoOp:100};
+  ratio = 0;
+  logoImg = null;
+  logoLoadedRow.style.display = 'none';
+  logoUploadBtn.querySelector('b').textContent = 'Upload logo';
+  logoInput.value = '';
+  textLayers = [];
+  renderTextLayerUI();
+  document.getElementById('s_logosize').value = 20;
+  document.getElementById('s_logoop').value = 100;
+  document.getElementById('v_logosize').textContent = 20;
+  document.getElementById('v_logoop').textContent = 100;
+  document.querySelectorAll('.ratio-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelector('.ratio-btn[data-ratio="0"]').classList.add('active');
+  document.querySelectorAll('.preset-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelector('.preset-btn[data-preset="none"]').classList.add('active');
+  exportSize = 'orig';
+  document.querySelectorAll('.size-btn[data-size]').forEach(b=>b.classList.remove('active'));
+  document.querySelector('.size-btn[data-size="orig"]').classList.add('active');
+  document.getElementById('sizeNote').textContent = "Exports at the photo's native resolution.";
+  syncSliders();
+  document.getElementById('panXRow').style.display='none';
+  document.getElementById('panYRow').style.display='none';
+  render();
+});
+
+// ---------- Crop rect calc ----------
+function getCropRect(){
+  const iw = img.naturalWidth, ih = img.naturalHeight;
+  if(ratio === 0) return {sx:0, sy:0, sw:iw, sh:ih};
+  let cw, ch;
+  if(iw/ih > ratio){ ch = ih; cw = ch * ratio; } else { cw = iw; ch = cw / ratio; }
+  const maxX = iw - cw, maxY = ih - ch;
+  const sx = maxX * (state.panx/100);
+  const sy = maxY * (state.pany/100);
+  return {sx, sy, sw:cw, sh:ch};
+}
+
+// ---------- Render pipeline ----------
+function applyFilterString(){
+  const b = 100 + state.bright;
+  const c = 100 + state.contrast;
+  const s = 100 + state.sat;
+  return `brightness(${b}%) contrast(${c}%) saturate(${s}%)`;
+}
+
+function drawLogo(c, w, h){
+  if(!logoImg) return;
+  const targetW = w * (state.logoSizePct/100);
+  const targetH = targetW * (logoImg.naturalHeight/logoImg.naturalWidth);
+  const pad = targetW * 0.12;
+  let x, y;
+  switch(state.logoPos){
+    case 'br': x = w - targetW - pad; y = h - targetH - pad; break;
+    case 'bl': x = pad; y = h - targetH - pad; break;
+    case 'tr': x = w - targetW - pad; y = pad; break;
+    case 'tl': x = pad; y = pad; break;
+    case 'center': x = (w-targetW)/2; y = (h-targetH)/2; break;
+  }
+  c.save();
+  c.globalAlpha = state.logoOp/100;
+  c.shadowColor = 'rgba(0,0,0,.4)';
+  c.shadowBlur = targetW*0.05;
+  c.drawImage(logoImg, x, y, targetW, targetH);
+  c.restore();
+}
+
+function drawTextLayers(c, w, h){
+  if(!textLayers.length) return;
+  const scale = w / lastPreviewW;
+  textLayers.forEach(layer=>{
+    if(!layer.text.trim()) return;
+    const size = layer.size * scale;
+    c.save();
+    c.font = `600 ${size}px Inter, sans-serif`;
+    c.fillStyle = layer.color;
+    c.globalAlpha = layer.opacity/100;
+    c.shadowColor = 'rgba(0,0,0,.55)';
+    c.shadowBlur = size*0.3;
+    c.shadowOffsetY = size*0.06;
+    const pad = size*0.9;
+    const metrics = c.measureText(layer.text);
+    let x, y;
+    c.textBaseline = 'alphabetic';
+    switch(layer.pos){
+      case 'br': x = w - metrics.width - pad; y = h - pad; break;
+      case 'bl': x = pad; y = h - pad; break;
+      case 'tr': x = w - metrics.width - pad; y = pad + size; break;
+      case 'tl': x = pad; y = pad + size; break;
+      case 'center': x = (w - metrics.width)/2; y = (h + size*0.35)/2; break;
+    }
+    c.fillText(layer.text, x, y);
+    c.restore();
+  });
+}
+
+function drawVignette(c, w, h){
+  if(state.vig <= 0) return;
+  const grad = c.createRadialGradient(w/2,h/2, Math.min(w,h)*0.3, w/2,h/2, Math.max(w,h)*0.72);
+  grad.addColorStop(0, 'rgba(0,0,0,0)');
+  grad.addColorStop(1, `rgba(0,0,0,${(state.vig/100)*0.85})`);
+  c.save();
+  c.fillStyle = grad;
+  c.fillRect(0,0,w,h);
+  c.restore();
+}
+
+function drawTemp(c, w, h){
+  if(state.temp === 0) return;
+  c.save();
+  c.globalCompositeOperation = 'overlay';
+  const amt = Math.min(Math.abs(state.temp)/40, 1) * 0.35;
+  if(state.temp > 0){
+    c.fillStyle = `rgba(255,150,60,${amt})`;
+  } else {
+    c.fillStyle = `rgba(60,140,255,${amt})`;
+  }
+  c.fillRect(0,0,w,h);
+  c.restore();
+}
+
+function drawClarity(c, w, h, sourceCanvas){
+  if(state.clarity <= 0) return;
+  c.save();
+  c.globalCompositeOperation = 'overlay';
+  c.globalAlpha = Math.min(state.clarity/60, 1) * 0.5;
+  c.drawImage(sourceCanvas, 0, 0, w, h);
+  c.restore();
+}
+
+function render(){
+  if(!hasImage) return;
+  const {sx, sy, sw, sh} = getCropRect();
+
+  const maxDim = 1400;
+  const scale = Math.min(1, maxDim / Math.max(sw, sh));
+  const outW = Math.round(sw * scale);
+  const outH = Math.round(sh * scale);
+
+  view.width = outW;
+  view.height = outH;
+  lastPreviewW = outW;
+  lastPreviewH = outH;
+
+  ctx.clearRect(0,0,outW,outH);
+  ctx.filter = applyFilterString();
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outW, outH);
+  ctx.filter = 'none';
+
+  if(state.clarity > 0){
+    drawClarity(ctx, outW, outH, view);
+  }
+  drawTemp(ctx, outW, outH);
+  drawVignette(ctx, outW, outH);
+  drawLogo(ctx, outW, outH);
+  drawTextLayers(ctx, outW, outH);
+}
+
+// ---------- Progressive upscale (better quality than a single jump) ----------
+function upscaleCanvas(srcCanvas, targetLongEdge){
+  let w = srcCanvas.width, h = srcCanvas.height;
+  if(Math.max(w,h) >= targetLongEdge) return srcCanvas;
+  let cur = srcCanvas;
+  while(Math.max(w,h) < targetLongEdge){
+    const stepScale = Math.min(1.5, targetLongEdge/Math.max(w,h));
+    const nw = Math.max(1, Math.round(w*stepScale));
+    const nh = Math.max(1, Math.round(h*stepScale));
+    const tmp = document.createElement('canvas');
+    tmp.width = nw; tmp.height = nh;
+    const tctx = tmp.getContext('2d');
+    tctx.imageSmoothingEnabled = true;
+    tctx.imageSmoothingQuality = 'high';
+    tctx.drawImage(cur, 0, 0, w, h, 0, 0, nw, nh);
+    cur = tmp; w = nw; h = nh;
+  }
+  return cur;
+}
+
+// ---------- Export at full resolution ----------
+function sharpen(imageData, amt){
+  // amt: 0..1 blend between original pixel and the unsharp-masked pixel.
+  // Previously this ran the full convolution at 100% strength unconditionally,
+  // which is why export looked much harsher/grainier than the preview
+  // (preview's "Clarity" is a soft overlay blend, capped around 0.5 alpha).
+  if(amt <= 0) return imageData;
+  const w = imageData.width, h = imageData.height;
+  const src = imageData.data;
+  const out = new Uint8ClampedArray(src.length);
+  const k = [0,-1,0,-1,5,-1,0,-1,0];
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      const i = (y*w+x)*4;
+      if(x===0||y===0||x===w-1||y===h-1){
+        out[i]=src[i]; out[i+1]=src[i+1]; out[i+2]=src[i+2]; out[i+3]=src[i+3];
+        continue;
+      }
+      for(let ch=0; ch<3; ch++){
+        let sum=0, ki=0;
+        for(let ky=-1; ky<=1; ky++){
+          for(let kx=-1; kx<=1; kx++){
+            const idx = ((y+ky)*w+(x+kx))*4+ch;
+            sum += src[idx]*k[ki]; ki++;
+          }
+        }
+        // blend: mostly original + a fraction of the sharpened result
+        out[i+ch] = src[i+ch]*(1-amt) + sum*amt;
+      }
+      out[i+3] = src[i+3];
+    }
+  }
+  return new ImageData(out, w, h);
+}
+
+downloadBtn.addEventListener('click', ()=>{
+  if(!hasImage) return;
+  downloadBtn.textContent = 'Rendering...';
+  downloadBtn.disabled = true;
+
+  setTimeout(()=>{
+    const {sx, sy, sw, sh} = getCropRect();
+    const full = document.createElement('canvas');
+    full.width = Math.round(sw);
+    full.height = Math.round(sh);
+    const fctx = full.getContext('2d');
+
+    fctx.filter = applyFilterString();
+    fctx.drawImage(img, sx, sy, sw, sh, 0, 0, full.width, full.height);
+    fctx.filter = 'none';
+
+    if(state.clarity > 0) drawClarity(fctx, full.width, full.height, full);
+    drawTemp(fctx, full.width, full.height);
+    drawVignette(fctx, full.width, full.height);
+
+    // upscale to 4K (long edge 3840px) if requested, before sharpening/watermark
+    const wasUpscaled = exportSize === '4k';
+    let output = wasUpscaled ? upscaleCanvas(full, 3840) : full;
+    const octx = output.getContext('2d');
+
+    // sharpen pass — kept mild and proportional so export matches the preview.
+    // Only compensate for the softness introduced by upscaling; don't stack
+    // extra sharpening on top of a photo that wasn't resized at all.
+    const sharpenAmt = wasUpscaled ? 0.28 : 0;
+    if(sharpenAmt > 0){
+      try{
+        const id = octx.getImageData(0,0,output.width, output.height);
+        const sharpened = sharpen(id, sharpenAmt);
+        octx.putImageData(sharpened, 0, 0);
+      }catch(e){ /* skip sharpen if it fails on very large images */ }
+    }
+
+    drawLogo(octx, output.width, output.height);
+    drawTextLayers(octx, output.width, output.height);
+
+    output.toBlob(blob=>{
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      const rawName = (document.getElementById('exportName').value || '').trim().replace(/[\\/:*?"<>|]/g, '_');
+      a.download = (rawName || 'garage-grade-export') + '.png';
+      a.click();
+      downloadBtn.textContent = 'Export';
+      downloadBtn.disabled = false;
+    }, 'image/png', 0.95);
+  }, 50);
+});
+
+// ===================== Metadata Remover =====================
+
+// ---------- EXIF / metadata reading (read-only, for display) ----------
+function readTiffValue(view, tiffOffset, entry, little){
+  const typeSizes = {1:1,2:1,3:2,4:4,5:8,7:1,9:4,10:8};
+  const size = (typeSizes[entry.type] || 1) * entry.count;
+  let dataOffset = entry.valueOffset;
+  if(size > 4){
+    dataOffset = tiffOffset + view.getUint32(entry.valueOffset, little);
+  }
+  if(entry.type === 2){ // ASCII
+    let str = '';
+    for(let i=0;i<entry.count-1;i++) str += String.fromCharCode(view.getUint8(dataOffset+i));
+    return str;
+  }
+  if(entry.type === 3){ // SHORT
+    const arr = [];
+    for(let i=0;i<entry.count;i++) arr.push(view.getUint16(dataOffset+i*2, little));
+    return entry.count === 1 ? arr[0] : arr;
+  }
+  if(entry.type === 4){ // LONG
+    const arr = [];
+    for(let i=0;i<entry.count;i++) arr.push(view.getUint32(dataOffset+i*4, little));
+    return entry.count === 1 ? arr[0] : arr;
+  }
+  if(entry.type === 5){ // RATIONAL
+    const arr = [];
+    for(let i=0;i<entry.count;i++){
+      const num = view.getUint32(dataOffset+i*8, little);
+      const den = view.getUint32(dataOffset+i*8+4, little);
+      arr.push(den ? num/den : 0);
+    }
+    return entry.count === 1 ? arr[0] : arr;
+  }
+  return null;
+}
+
+function readTiffIFD(view, tiffOffset, ifdOffset, little){
+  const count = view.getUint16(ifdOffset, little);
+  const entries = {};
+  for(let i=0;i<count;i++){
+    const eo = ifdOffset + 2 + i*12;
+    entries[view.getUint16(eo, little)] = {
+      type: view.getUint16(eo+2, little),
+      count: view.getUint32(eo+4, little),
+      valueOffset: eo+8
+    };
+  }
+  return entries;
+}
+
+function parseExifTags(view, tiffOffset){
+  const byteOrder = view.getUint16(tiffOffset);
+  const little = byteOrder === 0x4949;
+  const ifd0Offset = view.getUint32(tiffOffset+4, little);
+  const ifd0 = readTiffIFD(view, tiffOffset, tiffOffset+ifd0Offset, little);
+  const out = {};
+
+  if(ifd0[271]) out.make = String(readTiffValue(view, tiffOffset, ifd0[271], little)).trim();
+  if(ifd0[272]) out.model = String(readTiffValue(view, tiffOffset, ifd0[272], little)).trim();
+  if(ifd0[305]) out.software = String(readTiffValue(view, tiffOffset, ifd0[305], little)).trim();
+  if(ifd0[306]) out.dateTime = String(readTiffValue(view, tiffOffset, ifd0[306], little)).trim();
+
+  if(ifd0[34665]){ // Exif sub-IFD pointer
+    try{
+      const exifOffset = tiffOffset + readTiffValue(view, tiffOffset, ifd0[34665], little);
+      const exifIfd = readTiffIFD(view, tiffOffset, exifOffset, little);
+      if(exifIfd[36867]) out.dateTimeOriginal = String(readTiffValue(view, tiffOffset, exifIfd[36867], little)).trim();
+      if(exifIfd[42036]) out.lensModel = String(readTiffValue(view, tiffOffset, exifIfd[42036], little)).trim();
+    }catch(e){}
+  }
+
+  if(ifd0[34853]){ // GPS IFD pointer
+    try{
+      const gpsOffset = tiffOffset + readTiffValue(view, tiffOffset, ifd0[34853], little);
+      const gpsIfd = readTiffIFD(view, tiffOffset, gpsOffset, little);
+      if(gpsIfd[1] && gpsIfd[2] && gpsIfd[3] && gpsIfd[4]){
+        const latRef = readTiffValue(view, tiffOffset, gpsIfd[1], little);
+        const lat = readTiffValue(view, tiffOffset, gpsIfd[2], little);
+        const lonRef = readTiffValue(view, tiffOffset, gpsIfd[3], little);
+        const lon = readTiffValue(view, tiffOffset, gpsIfd[4], little);
+        const latDec = (lat[0]+lat[1]/60+lat[2]/3600) * (latRef === 'S' ? -1 : 1);
+        const lonDec = (lon[0]+lon[1]/60+lon[2]/3600) * (lonRef === 'W' ? -1 : 1);
+        out.gps = {lat: latDec, lon: lonDec};
+      }
+    }catch(e){}
+  }
+  return out;
+}
+
+function buildTagList(out){
+  const tags = [];
+  if(out.make || out.model) tags.push({label:'Camera', value:[out.make,out.model].filter(Boolean).join(' '), warn:false});
+  if(out.dateTimeOriginal || out.dateTime) tags.push({label:'Date taken', value: out.dateTimeOriginal || out.dateTime, warn:false});
+  if(out.gps) tags.push({label:'GPS location', value: out.gps.lat.toFixed(5)+', '+out.gps.lon.toFixed(5), warn:true});
+  if(out.lensModel) tags.push({label:'Lens', value: out.lensModel, warn:false});
+  if(out.software) tags.push({label:'Software', value: out.software, warn:false});
+  return tags;
+}
+
+function parseJpegMeta(buf){
+  try{
+    const view = new DataView(buf);
+    if(view.getUint16(0) !== 0xFFD8) return {tags:[], hasAny:false};
+    let offset = 2;
+    while(offset < view.byteLength - 4){
+      if(view.getUint8(offset) !== 0xFF) break;
+      const marker = view.getUint8(offset+1);
+      if(marker === 0xD8 || marker === 0xD9){ offset += 2; continue; }
+      if(marker >= 0xD0 && marker <= 0xD7){ offset += 2; continue; }
+      if(marker === 0xDA) break; // start of scan — no more metadata markers follow
+      const size = view.getUint16(offset+2);
+      if(marker === 0xE1 && size > 8){
+        const h1 = view.getUint8(offset+4), h2 = view.getUint8(offset+5),
+              h3 = view.getUint8(offset+6), h4 = view.getUint8(offset+7);
+        if(h1===0x45 && h2===0x78 && h3===0x69 && h4===0x66){ // "Exif"
+          const out = parseExifTags(view, offset+10);
+          return {tags: buildTagList(out), hasAny: Object.keys(out).length > 0};
+        }
+      }
+      offset += 2 + size;
+    }
+  }catch(e){}
+  return {tags:[], hasAny:false};
+}
+
+function parsePngMeta(buf){
+  try{
+    const view = new DataView(buf);
+    if(view.getUint32(0) !== 0x89504e47) return {tags:[], hasAny:false};
+    let offset = 8;
+    const tags = [];
+    while(offset < view.byteLength - 8){
+      const length = view.getUint32(offset);
+      const type = String.fromCharCode(view.getUint8(offset+4),view.getUint8(offset+5),view.getUint8(offset+6),view.getUint8(offset+7));
+      if(type === 'tEXt' || type === 'iTXt'){
+        let i = offset+8, keyword = '';
+        const end = offset+8+length;
+        while(i < end && view.getUint8(i) !== 0){ keyword += String.fromCharCode(view.getUint8(i)); i++; }
+        if(keyword) tags.push({label:'Text chunk', value: keyword, warn:false});
+      }
+      if(type === 'IEND') break;
+      offset += 8 + length + 4;
+    }
+    return {tags, hasAny: tags.length > 0};
+  }catch(e){
+    return {tags:[], hasAny:false};
+  }
+}
+
+async function readImageMeta(file){
+  const buf = await file.arrayBuffer();
+  if(file.type === 'image/jpeg' || file.type === 'image/jpg') return parseJpegMeta(buf);
+  if(file.type === 'image/png') return parsePngMeta(buf);
+  return {tags:[], hasAny:false};
+}
+
+// ---------- Metadata list UI ----------
+const metaDropZone = document.getElementById('metaDropZone');
+const metaFileInput = document.getElementById('metaFileInput');
+const metaList = document.getElementById('metaList');
+const metaFooter = document.getElementById('metaFooter');
+const metaCount = document.getElementById('metaCount');
+const metaClearBtn = document.getElementById('metaClearBtn');
+const metaDownloadBtn = document.getElementById('metaDownloadBtn');
+
+let metaFiles = [];
+let metaIdSeq = 1;
+let metaMode = 'strip';
+
+const modeStripBtn = document.getElementById('modeStripBtn');
+const modeCustomBtn = document.getElementById('modeCustomBtn');
+const metaFieldsPanel = document.getElementById('metaFields');
+
+function setMetaMode(mode){
+  metaMode = mode;
+  modeStripBtn.classList.toggle('active', mode === 'strip');
+  modeCustomBtn.classList.toggle('active', mode === 'custom');
+  metaFieldsPanel.classList.toggle('active', mode === 'custom');
+  renderMetaList();
+}
+modeStripBtn.addEventListener('click', ()=>setMetaMode('strip'));
+modeCustomBtn.addEventListener('click', ()=>setMetaMode('custom'));
+
+function getCustomMetaValues(){
+  const dtRaw = document.getElementById('metaDatetime').value; // yyyy-MM-ddTHH:mm
+  let datetime = '';
+  if(dtRaw){
+    const [d, t] = dtRaw.split('T');
+    datetime = d.replace(/-/g, ':') + ' ' + (t || '00:00') + ':00';
+  }
+  return {
+    make: document.getElementById('metaMake').value.trim(),
+    model: document.getElementById('metaModel').value.trim(),
+    artist: document.getElementById('metaArtist').value.trim(),
+    copyright: document.getElementById('metaCopyright').value.trim(),
+    software: document.getElementById('metaSoftware').value.trim(),
+    description: document.getElementById('metaDesc').value.trim(),
+    datetime
+  };
+}
+
+function formatBytes(bytes){
+  if(bytes < 1024) return bytes + ' B';
+  if(bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+  return (bytes/1024/1024).toFixed(2) + ' MB';
+}
+
+function renderMetaList(){
+  metaList.innerHTML = '';
+  metaFiles.forEach(item=>{
+    const div = document.createElement('div');
+    div.className = 'meta-item';
+    const thumbHtml = item.thumbUrl
+      ? `<img class="meta-thumb" src="${item.thumbUrl}">`
+      : `<div class="meta-thumb-ph"></div>`;
+    let tagsHtml;
+    if(!item.metaLoaded){
+      tagsHtml = `<div class="meta-none">Scanning…</div>`;
+    } else if(item.hasAny){
+      tagsHtml = `<div class="meta-tags">` + item.tags.map(t=>
+        `<span class="meta-tag${t.warn?' warn':''}">${escapeAttr(t.label)}: ${escapeAttr(t.value)}</span>`
+      ).join('') + `</div>`;
+    } else {
+      tagsHtml = `<div class="meta-none">No metadata found</div>`;
+    }
+    const expectedExt = item.type === 'image/png' ? '.png' : '.jpg';
+    const expectedSuffix = metaMode === 'custom' ? '_meta' : '_clean';
+    div.innerHTML = `
+      ${thumbHtml}
+      <div class="meta-info">
+        <div class="meta-name-row">
+          <div style="flex:1;min-width:0;">
+            <input class="meta-name-input" data-rename="${item.id}" value="${escapeAttr(item.outputBase)}" spellcheck="false">
+            <div class="meta-size">${formatBytes(item.size)} <span class="meta-name-ext">— exports as ${escapeAttr(item.outputBase)}${expectedSuffix}${expectedExt}</span></div>
+          </div>
+          <button class="meta-remove" data-remove="${item.id}">Remove</button>
+        </div>
+        ${tagsHtml}
+      </div>
+    `;
+    metaList.appendChild(div);
+  });
+
+  metaList.querySelectorAll('.meta-remove').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = parseInt(btn.dataset.remove, 10);
+      metaFiles = metaFiles.filter(f=>f.id !== id);
+      renderMetaList();
+    });
+  });
+
+  metaList.querySelectorAll('.meta-name-input').forEach(input=>{
+    input.addEventListener('input', ()=>{
+      const id = parseInt(input.dataset.rename, 10);
+      const item = metaFiles.find(f=>f.id === id);
+      if(item){
+        item.outputBase = input.value;
+        const hint = input.parentElement.querySelector('.meta-name-ext');
+        if(hint){
+          const expectedExt = item.type === 'image/png' ? '.png' : '.jpg';
+          const expectedSuffix = metaMode === 'custom' ? '_meta' : '_clean';
+          hint.textContent = `— exports as ${item.outputBase}${expectedSuffix}${expectedExt}`;
+        }
+      }
+    });
+    input.addEventListener('click', e=>e.stopPropagation());
+  });
+
+  metaFooter.style.display = metaFiles.length ? 'flex' : 'none';
+  metaCount.textContent = `${metaFiles.length} photo${metaFiles.length===1?'':'s'}`;
+  const label = metaMode === 'custom' ? 'Set Metadata & Download ZIP' : 'Strip Metadata & Download ZIP';
+  metaDownloadBtn.textContent = `${label} (${metaFiles.length})`;
+}
+
+function splitName(filename){
+  const m = filename.match(/^(.*?)(\.[^./\\]+)?$/);
+  return {base: m[1] || filename, ext: m[2] || ''};
+}
+
+function addMetaFiles(fileList){
+  Array.from(fileList).forEach(file=>{
+    if(!file.type.startsWith('image/')) return;
+    const {base} = splitName(file.name);
+    const item = {
+      id: metaIdSeq++, file, name: file.name, outputBase: base, size: file.size, type: file.type,
+      thumbUrl: null, tags: [], hasAny: false, metaLoaded: false
+    };
+    metaFiles.push(item);
+
+    const reader = new FileReader();
+    reader.onload = e => { item.thumbUrl = e.target.result; renderMetaList(); };
+    reader.readAsDataURL(file);
+
+    readImageMeta(file).then(meta=>{
+      item.tags = meta.tags;
+      item.hasAny = meta.hasAny;
+      item.metaLoaded = true;
+      renderMetaList();
+    }).catch(()=>{
+      item.metaLoaded = true;
+      renderMetaList();
+    });
+  });
+  renderMetaList();
+}
+
+metaDropZone.addEventListener('click', ()=>metaFileInput.click());
+metaFileInput.addEventListener('change', e => addMetaFiles(e.target.files));
+['dragenter','dragover'].forEach(evt=>{
+  metaDropZone.addEventListener(evt, e=>{e.preventDefault();metaDropZone.classList.add('drag');});
+});
+['dragleave','drop'].forEach(evt=>{
+  metaDropZone.addEventListener(evt, e=>{e.preventDefault();metaDropZone.classList.remove('drag');});
+});
+metaDropZone.addEventListener('drop', e=>{
+  e.preventDefault();
+  addMetaFiles(e.dataTransfer.files);
+});
+
+metaClearBtn.addEventListener('click', ()=>{
+  metaFiles = [];
+  renderMetaList();
+});
+
+// ---------- Strip metadata (re-encode via canvas — this drops EXIF/GPS/etc) ----------
+function stripImageMetadata(file){
+  return new Promise((resolve, reject)=>{
+    const im = new Image();
+    const url = URL.createObjectURL(file);
+    im.onload = ()=>{
+      const canvas = document.createElement('canvas');
+      canvas.width = im.naturalWidth;
+      canvas.height = im.naturalHeight;
+      const cctx = canvas.getContext('2d');
+      cctx.drawImage(im, 0, 0);
+      URL.revokeObjectURL(url);
+      const outType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+      canvas.toBlob(blob=>{
+        if(blob) resolve({blob, outType}); else reject(new Error('toBlob failed'));
+      }, outType, 0.95);
+    };
+    im.onerror = () => { URL.revokeObjectURL(url); reject(new Error('image load failed')); };
+    im.src = url;
+  });
+}
+
+// ---------- Minimal ZIP writer (store method — no external deps needed) ----------
+const CRC_TABLE = (()=>{
+  const table = new Uint32Array(256);
+  for(let n=0;n<256;n++){
+    let c = n;
+    for(let k=0;k<8;k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    table[n] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(bytes){
+  let crc = 0xFFFFFFFF;
+  for(let i=0;i<bytes.length;i++) crc = CRC_TABLE[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function dosDateTime(date){
+  const time = ((date.getHours() & 0x1F) << 11) | ((date.getMinutes() & 0x3F) << 5) | ((Math.floor(date.getSeconds()/2)) & 0x1F);
+  const dosDate = (((date.getFullYear()-1980) & 0x7F) << 9) | (((date.getMonth()+1) & 0xF) << 5) | (date.getDate() & 0x1F);
+  return {time, dosDate};
+}
+
+function createZip(files){
+  const {time, dosDate} = dosDateTime(new Date());
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+
+  files.forEach(f=>{
+    const nameBytes = new TextEncoder().encode(f.name);
+    const data = f.data;
+    const crc = crc32(data);
+    const size = data.length;
+
+    const local = new Uint8Array(30 + nameBytes.length);
+    const lv = new DataView(local.buffer);
+    lv.setUint32(0, 0x04034b50, true);
+    lv.setUint16(4, 20, true);
+    lv.setUint16(6, 0, true);
+    lv.setUint16(8, 0, true); // store, no compression
+    lv.setUint16(10, time, true);
+    lv.setUint16(12, dosDate, true);
+    lv.setUint32(14, crc, true);
+    lv.setUint32(18, size, true);
+    lv.setUint32(22, size, true);
+    lv.setUint16(26, nameBytes.length, true);
+    lv.setUint16(28, 0, true);
+    local.set(nameBytes, 30);
+    localParts.push(local, data);
+
+    const central = new Uint8Array(46 + nameBytes.length);
+    const cv = new DataView(central.buffer);
+    cv.setUint32(0, 0x02014b50, true);
+    cv.setUint16(4, 20, true);
+    cv.setUint16(6, 20, true);
+    cv.setUint16(8, 0, true);
+    cv.setUint16(10, 0, true);
+    cv.setUint16(12, time, true);
+    cv.setUint16(14, dosDate, true);
+    cv.setUint32(16, crc, true);
+    cv.setUint32(20, size, true);
+    cv.setUint32(24, size, true);
+    cv.setUint16(28, nameBytes.length, true);
+    cv.setUint16(30, 0, true);
+    cv.setUint16(32, 0, true);
+    cv.setUint16(34, 0, true);
+    cv.setUint16(36, 0, true);
+    cv.setUint32(38, 0, true);
+    cv.setUint32(42, offset, true);
+    central.set(nameBytes, 46);
+    centralParts.push(central);
+
+    offset += local.length + data.length;
+  });
+
+  const centralStart = offset;
+  const centralSize = centralParts.reduce((sum, c) => sum + c.length, 0);
+
+  const end = new Uint8Array(22);
+  const ev = new DataView(end.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(4, 0, true);
+  ev.setUint16(6, 0, true);
+  ev.setUint16(8, files.length, true);
+  ev.setUint16(10, files.length, true);
+  ev.setUint32(12, centralSize, true);
+  ev.setUint32(16, centralStart, true);
+  ev.setUint16(20, 0, true);
+
+  return new Blob([...localParts, ...centralParts, end], {type:'application/zip'});
+}
+
+// ---------- Write custom metadata back into the re-encoded image ----------
+function sanitizeAscii(str){
+  let out = '';
+  for(const ch of String(str)){
+    const code = ch.codePointAt(0);
+    out += (code >= 32 && code <= 126) ? ch : '?';
+  }
+  return out;
+}
+
+function latin1Bytes(str){
+  const arr = new Uint8Array(str.length);
+  for(let i=0;i<str.length;i++){
+    const code = str.charCodeAt(i);
+    arr[i] = code <= 255 ? code : 63; // '?' fallback
+  }
+  return arr;
+}
+
+// Builds a minimal EXIF APP1 segment (TIFF/IFD0, ASCII tags only) from user-entered fields.
+function buildExifApp1(meta){
+  const fieldsDef = [];
+  if(meta.description) fieldsDef.push([0x010E, sanitizeAscii(meta.description)]);
+  if(meta.make)        fieldsDef.push([0x010F, sanitizeAscii(meta.make)]);
+  if(meta.model)       fieldsDef.push([0x0110, sanitizeAscii(meta.model)]);
+  if(meta.software)    fieldsDef.push([0x0131, sanitizeAscii(meta.software)]);
+  if(meta.datetime)    fieldsDef.push([0x0132, sanitizeAscii(meta.datetime)]);
+  if(meta.artist)      fieldsDef.push([0x013B, sanitizeAscii(meta.artist)]);
+  if(meta.copyright)   fieldsDef.push([0x8298, sanitizeAscii(meta.copyright)]);
+  if(!fieldsDef.length) return null;
+
+  const count = fieldsDef.length;
+  const ifdSize = 2 + 12*count + 4; // count + entries + next-IFD offset
+  let dataOffset = 8 + ifdSize; // TIFF-relative, right after IFD0
+
+  const overflow = [];
+  const entries = fieldsDef.map(([tag, str])=>{
+    const strBytes = new TextEncoder().encode(str + '\0');
+    let inlineBytes = null, offsetVal = null;
+    if(strBytes.length <= 4){
+      inlineBytes = new Uint8Array(4);
+      inlineBytes.set(strBytes, 0);
+    } else {
+      offsetVal = dataOffset;
+      overflow.push(strBytes);
+      dataOffset += strBytes.length;
+    }
+    return {tag, count: strBytes.length, inlineBytes, offsetVal};
+  });
+
+  const tiff = new Uint8Array(dataOffset);
+  const dv = new DataView(tiff.buffer);
+  tiff[0]=0x49; tiff[1]=0x49; // 'II' little-endian
+  dv.setUint16(2, 42, true);
+  dv.setUint32(4, 8, true); // offset to IFD0
+  dv.setUint16(8, count, true);
+  let entryPos = 10;
+  for(const e of entries){
+    dv.setUint16(entryPos, e.tag, true);
+    dv.setUint16(entryPos+2, 2, true); // type 2 = ASCII
+    dv.setUint32(entryPos+4, e.count, true);
+    if(e.inlineBytes) tiff.set(e.inlineBytes, entryPos+8);
+    else dv.setUint32(entryPos+8, e.offsetVal, true);
+    entryPos += 12;
+  }
+  dv.setUint32(entryPos, 0, true); // no next IFD
+  entryPos += 4;
+  for(const bytes of overflow){
+    tiff.set(bytes, entryPos);
+    entryPos += bytes.length;
+  }
+
+  const exifHeader = new TextEncoder().encode('Exif\0\0');
+  const app1Data = new Uint8Array(exifHeader.length + tiff.length);
+  app1Data.set(exifHeader, 0);
+  app1Data.set(tiff, exifHeader.length);
+
+  const app1 = new Uint8Array(4 + app1Data.length); // marker(2) + length(2) + data
+  app1[0]=0xFF; app1[1]=0xE1;
+  const av = new DataView(app1.buffer);
+  av.setUint16(2, app1Data.length + 2, false); // JPEG segment length is big-endian
+  app1.set(app1Data, 4);
+  return app1;
+}
+
+function insertApp1IntoJpeg(jpegBytes, app1Bytes){
+  if(jpegBytes[0] !== 0xFF || jpegBytes[1] !== 0xD8) return jpegBytes;
+  const out = new Uint8Array(jpegBytes.length + app1Bytes.length);
+  out[0]=0xFF; out[1]=0xD8;
+  out.set(app1Bytes, 2);
+  out.set(jpegBytes.subarray(2), 2 + app1Bytes.length);
+  return out;
+}
+
+// Inserts PNG tEXt chunks (keyword/value pairs) right after the IHDR chunk.
+function pngInsertTextChunks(bytes, entries){
+  if(!entries.length) return bytes;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const ihdrLen = view.getUint32(8, false);
+  const ihdrChunkTotal = 4 + 4 + ihdrLen + 4;
+  const insertPos = 8 + ihdrChunkTotal;
+  const typeBytes = new TextEncoder().encode('tEXt');
+
+  const newChunks = entries.map(({keyword, text})=>{
+    const kwBytes = latin1Bytes(keyword).slice(0, 79);
+    const txtBytes = latin1Bytes(text);
+    const data = new Uint8Array(kwBytes.length + 1 + txtBytes.length);
+    data.set(kwBytes, 0);
+    data[kwBytes.length] = 0;
+    data.set(txtBytes, kwBytes.length + 1);
+    const crcInput = new Uint8Array(typeBytes.length + data.length);
+    crcInput.set(typeBytes, 0);
+    crcInput.set(data, typeBytes.length);
+    const crc = crc32(crcInput);
+    const chunk = new Uint8Array(4 + 4 + data.length + 4);
+    const cv = new DataView(chunk.buffer);
+    cv.setUint32(0, data.length, false);
+    chunk.set(typeBytes, 4);
+    chunk.set(data, 8);
+    cv.setUint32(8 + data.length, crc, false);
+    return chunk;
+  });
+
+  const totalNewLen = newChunks.reduce((s,c)=>s+c.length, 0);
+  const out = new Uint8Array(bytes.length + totalNewLen);
+  out.set(bytes.subarray(0, insertPos), 0);
+  let off = insertPos;
+  for(const c of newChunks){ out.set(c, off); off += c.length; }
+  out.set(bytes.subarray(insertPos), off);
+  return out;
+}
+
+function applyCustomMetadata(bytes, outType, meta){
+  if(outType === 'image/jpeg'){
+    const app1 = buildExifApp1(meta);
+    return app1 ? insertApp1IntoJpeg(bytes, app1) : bytes;
+  }
+  if(outType === 'image/png'){
+    const entries = [];
+    if(meta.description) entries.push({keyword:'Description', text: meta.description});
+    if(meta.artist)       entries.push({keyword:'Author', text: meta.artist});
+    if(meta.copyright)    entries.push({keyword:'Copyright', text: meta.copyright});
+    if(meta.software)     entries.push({keyword:'Software', text: meta.software});
+    if(meta.make || meta.model) entries.push({keyword:'Source', text: [meta.make, meta.model].filter(Boolean).join(' ')});
+    if(meta.datetime)     entries.push({keyword:'Creation Time', text: meta.datetime});
+    return entries.length ? pngInsertTextChunks(bytes, entries) : bytes;
+  }
+  return bytes;
+}
+
+metaDownloadBtn.addEventListener('click', async ()=>{
+  if(!metaFiles.length) return;
+  metaDownloadBtn.disabled = true;
+  metaClearBtn.disabled = true;
+  const originalLabel = metaDownloadBtn.textContent;
+  metaDownloadBtn.textContent = 'Processing...';
+
+  const customMeta = metaMode === 'custom' ? getCustomMetaValues() : null;
+  const zipEntries = [];
+  const usedNames = new Set();
+  for(const item of metaFiles){
+    try{
+      const {blob, outType} = await stripImageMetadata(item.file);
+      let arrBuf = await blob.arrayBuffer();
+      let outBytes = new Uint8Array(arrBuf);
+      if(customMeta){
+        outBytes = applyCustomMetadata(outBytes, outType, customMeta);
+      }
+      const baseName = (item.outputBase || '').trim().replace(/[\\/:*?"<>|]/g, '_') || 'photo';
+      const ext = outType === 'image/png' ? '.png' : '.jpg';
+      const suffix = customMeta ? '_meta' : '_clean';
+      let finalName = `${baseName}${suffix}${ext}`;
+      let dupe = 1;
+      while(usedNames.has(finalName)){
+        finalName = `${baseName}${suffix}_${dupe}${ext}`;
+        dupe++;
+      }
+      usedNames.add(finalName);
+      zipEntries.push({name: finalName, data: outBytes});
+    }catch(e){
+      console.error('Failed to process metadata for', item.name, e);
+    }
+  }
+
+  if(zipEntries.length){
+    const zipBlob = createZip(zipEntries);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(zipBlob);
+    a.download = 'clean-photos.zip';
+    a.click();
+  }
+
+  metaDownloadBtn.disabled = false;
+  metaClearBtn.disabled = false;
+  metaDownloadBtn.textContent = originalLabel;
+});
+</script>
+</body>
+</html>
