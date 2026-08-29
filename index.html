@@ -211,6 +211,14 @@
   .meta-mode-btn.active{border-color:var(--amber);color:var(--amber);background:#1c1712;}
   .meta-fields{display:none;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:14px;}
   .meta-fields.active{display:block;}
+  .meta-preset-row{display:flex;gap:8px;margin-bottom:14px;}
+  .meta-preset-row select{
+    flex:1;min-width:0;background:var(--panel);border:1px solid var(--line);color:var(--text);
+    padding:8px 9px;border-radius:6px;font-size:12.5px;font-family:'JetBrains Mono',monospace;
+  }
+  .meta-preset-row select:focus{outline:none;border-color:var(--amber);}
+  .meta-preset-row .ratio-btn{flex-shrink:0;}
+  .meta-preset-row .ratio-btn:disabled{opacity:.4;cursor:not-allowed;}
   .meta-fields-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
   @media(max-width:600px){.meta-fields-grid{grid-template-columns:1fr;}}
   .meta-field label{display:block;font-size:10.5px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;margin-bottom:5px;letter-spacing:.3px;}
@@ -404,6 +412,13 @@
       <button class="meta-mode-btn" id="modeCustomBtn" data-mode="custom">Set custom metadata</button>
     </div>
     <div class="meta-fields" id="metaFields">
+      <div class="meta-preset-row">
+        <select id="metaPresetSelect">
+          <option value="">— Load a saved preset —</option>
+        </select>
+        <button class="ratio-btn" id="metaPresetSaveBtn">Save as preset</button>
+        <button class="ratio-btn" id="metaPresetDeleteBtn" style="color:var(--red);border-color:var(--red);" disabled>Delete</button>
+      </div>
       <div class="meta-fields-grid">
         <div class="meta-field"><label>Camera make</label><input type="text" id="metaMake" placeholder="e.g. Canon"></div>
         <div class="meta-field"><label>Camera model</label><input type="text" id="metaModel" placeholder="e.g. EOS R6"></div>
@@ -1146,12 +1161,17 @@ const modeStripBtn = document.getElementById('modeStripBtn');
 const modeCustomBtn = document.getElementById('modeCustomBtn');
 const metaFieldsPanel = document.getElementById('metaFields');
 
-function setMetaMode(mode){
+function setMetaMode(mode, {skipSave} = {}){
   metaMode = mode;
   modeStripBtn.classList.toggle('active', mode === 'strip');
   modeCustomBtn.classList.toggle('active', mode === 'custom');
   metaFieldsPanel.classList.toggle('active', mode === 'custom');
-  renderMetaList();
+  metaFiles.forEach(item=>{
+    const refs = metaItemEls.get(item.id);
+    if(refs) updateNameHint(item, refs);
+  });
+  updateMetaFooter();
+  if(!skipSave) saveMetaFieldPrefs();
 }
 modeStripBtn.addEventListener('click', ()=>setMetaMode('strip'));
 modeCustomBtn.addEventListener('click', ()=>setMetaMode('custom'));
@@ -1180,71 +1200,109 @@ function formatBytes(bytes){
   return (bytes/1024/1024).toFixed(2) + ' MB';
 }
 
-function renderMetaList(){
-  metaList.innerHTML = '';
-  metaFiles.forEach(item=>{
-    const div = document.createElement('div');
-    div.className = 'meta-item';
-    const thumbHtml = item.thumbUrl
-      ? `<img class="meta-thumb" src="${item.thumbUrl}">`
-      : `<div class="meta-thumb-ph"></div>`;
-    let tagsHtml;
-    if(!item.metaLoaded){
-      tagsHtml = `<div class="meta-none">Scanning…</div>`;
-    } else if(item.hasAny){
-      tagsHtml = `<div class="meta-tags">` + item.tags.map(t=>
-        `<span class="meta-tag${t.warn?' warn':''}">${escapeAttr(t.label)}: ${escapeAttr(t.value)}</span>`
-      ).join('') + `</div>`;
-    } else {
-      tagsHtml = `<div class="meta-none">No metadata found</div>`;
-    }
-    const expectedExt = item.type === 'image/png' ? '.png' : '.jpg';
-    const expectedSuffix = metaMode === 'custom' ? '_meta' : '_clean';
-    div.innerHTML = `
-      ${thumbHtml}
-      <div class="meta-info">
-        <div class="meta-name-row">
-          <div style="flex:1;min-width:0;">
-            <input class="meta-name-input" data-rename="${item.id}" value="${escapeAttr(item.outputBase)}" spellcheck="false">
-            <div class="meta-size">${formatBytes(item.size)} <span class="meta-name-ext">— exports as ${escapeAttr(item.outputBase)}${expectedSuffix}${expectedExt}</span></div>
-          </div>
-          <button class="meta-remove" data-remove="${item.id}">Remove</button>
+// Keyed refs for each rendered item — lets us patch just the piece that changed
+// (thumbnail / tags / hint text) instead of rebuilding the whole list, which used
+// to wipe out the rename <input> — and the name you typed into it — mid-edit.
+const metaItemEls = new Map(); // id -> {div, thumbSlot, tagsSlot, nameInput, hintEl}
+
+function nameHintText(item){
+  const expectedExt = item.type === 'image/png' ? '.png' : '.jpg';
+  const expectedSuffix = metaMode === 'custom' ? '_meta' : '_clean';
+  return `— exports as ${item.outputBase}${expectedSuffix}${expectedExt}`;
+}
+
+function updateNameHint(item, refs){
+  refs.hintEl.textContent = nameHintText(item);
+}
+
+function updateMetaItemThumb(item, refs){
+  refs.thumbSlot.innerHTML = item.thumbUrl
+    ? `<img class="meta-thumb" src="${item.thumbUrl}">`
+    : `<div class="meta-thumb-ph"></div>`;
+}
+
+function updateMetaItemTags(item, refs){
+  let tagsHtml;
+  if(!item.metaLoaded){
+    tagsHtml = `<div class="meta-none">Scanning…</div>`;
+  } else if(item.hasAny){
+    tagsHtml = `<div class="meta-tags">` + item.tags.map(t=>
+      `<span class="meta-tag${t.warn?' warn':''}">${escapeAttr(t.label)}: ${escapeAttr(t.value)}</span>`
+    ).join('') + `</div>`;
+  } else {
+    tagsHtml = `<div class="meta-none">No metadata found</div>`;
+  }
+  refs.tagsSlot.innerHTML = tagsHtml;
+}
+
+function buildMetaItemDiv(item){
+  const div = document.createElement('div');
+  div.className = 'meta-item';
+  div.innerHTML = `
+    <div class="meta-thumb-slot"></div>
+    <div class="meta-info">
+      <div class="meta-name-row">
+        <div style="flex:1;min-width:0;">
+          <input class="meta-name-input" data-rename="${item.id}" value="${escapeAttr(item.outputBase)}" spellcheck="false">
+          <div class="meta-size">${formatBytes(item.size)} <span class="meta-name-ext"></span></div>
         </div>
-        ${tagsHtml}
+        <button class="meta-remove" data-remove="${item.id}">Remove</button>
       </div>
-    `;
-    metaList.appendChild(div);
+      <div class="meta-tags-slot"></div>
+    </div>
+  `;
+  const refs = {
+    div,
+    thumbSlot: div.querySelector('.meta-thumb-slot'),
+    tagsSlot: div.querySelector('.meta-tags-slot'),
+    nameInput: div.querySelector('.meta-name-input'),
+    hintEl: div.querySelector('.meta-name-ext')
+  };
+
+  refs.nameInput.addEventListener('input', ()=>{
+    item.outputBase = refs.nameInput.value;
+    updateNameHint(item, refs);
+  });
+  refs.nameInput.addEventListener('click', e=>e.stopPropagation());
+
+  div.querySelector('.meta-remove').addEventListener('click', ()=>{
+    metaFiles = metaFiles.filter(f=>f.id !== item.id);
+    metaItemEls.delete(item.id);
+    div.remove();
+    updateMetaFooter();
   });
 
-  metaList.querySelectorAll('.meta-remove').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const id = parseInt(btn.dataset.remove, 10);
-      metaFiles = metaFiles.filter(f=>f.id !== id);
-      renderMetaList();
-    });
-  });
+  metaItemEls.set(item.id, refs);
+  updateMetaItemThumb(item, refs);
+  updateMetaItemTags(item, refs);
+  updateNameHint(item, refs);
+  return div;
+}
 
-  metaList.querySelectorAll('.meta-name-input').forEach(input=>{
-    input.addEventListener('input', ()=>{
-      const id = parseInt(input.dataset.rename, 10);
-      const item = metaFiles.find(f=>f.id === id);
-      if(item){
-        item.outputBase = input.value;
-        const hint = input.parentElement.querySelector('.meta-name-ext');
-        if(hint){
-          const expectedExt = item.type === 'image/png' ? '.png' : '.jpg';
-          const expectedSuffix = metaMode === 'custom' ? '_meta' : '_clean';
-          hint.textContent = `— exports as ${item.outputBase}${expectedSuffix}${expectedExt}`;
-        }
-      }
-    });
-    input.addEventListener('click', e=>e.stopPropagation());
-  });
-
+function updateMetaFooter(){
   metaFooter.style.display = metaFiles.length ? 'flex' : 'none';
   metaCount.textContent = `${metaFiles.length} photo${metaFiles.length===1?'':'s'}`;
   const label = metaMode === 'custom' ? 'Set Metadata & Download ZIP' : 'Strip Metadata & Download ZIP';
   metaDownloadBtn.textContent = `${label} (${metaFiles.length})`;
+}
+
+// Structural sync only: add DOM for new items, drop DOM for removed items,
+// keep order. Never touches an existing item's input, so it can't blow away
+// a name you're mid-way through typing (fixes: typed names not sticking).
+function renderMetaList(){
+  const existingIds = new Set(metaFiles.map(f=>f.id));
+  for(const [id, refs] of metaItemEls){
+    if(!existingIds.has(id)){ refs.div.remove(); metaItemEls.delete(id); }
+  }
+  metaFiles.forEach(item=>{
+    const refs = metaItemEls.get(item.id);
+    if(!refs){
+      metaList.appendChild(buildMetaItemDiv(item));
+    } else {
+      metaList.appendChild(refs.div);
+    }
+  });
+  updateMetaFooter();
 }
 
 function splitName(filename){
@@ -1263,17 +1321,23 @@ function addMetaFiles(fileList){
     metaFiles.push(item);
 
     const reader = new FileReader();
-    reader.onload = e => { item.thumbUrl = e.target.result; renderMetaList(); };
+    reader.onload = e => {
+      item.thumbUrl = e.target.result;
+      const refs = metaItemEls.get(item.id);
+      if(refs) updateMetaItemThumb(item, refs);
+    };
     reader.readAsDataURL(file);
 
     readImageMeta(file).then(meta=>{
       item.tags = meta.tags;
       item.hasAny = meta.hasAny;
       item.metaLoaded = true;
-      renderMetaList();
+      const refs = metaItemEls.get(item.id);
+      if(refs) updateMetaItemTags(item, refs);
     }).catch(()=>{
       item.metaLoaded = true;
-      renderMetaList();
+      const refs = metaItemEls.get(item.id);
+      if(refs) updateMetaItemTags(item, refs);
     });
   });
   renderMetaList();
@@ -1294,8 +1358,107 @@ metaDropZone.addEventListener('drop', e=>{
 
 metaClearBtn.addEventListener('click', ()=>{
   metaFiles = [];
-  renderMetaList();
+  metaItemEls.forEach(refs=>refs.div.remove());
+  metaItemEls.clear();
+  updateMetaFooter();
 });
+
+// ---------- Remember custom-metadata field values & mode between visits ----------
+const META_PREFS_KEY = 'garageGradeMetaFieldPrefs';
+const metaFieldIds = ['metaMake','metaModel','metaArtist','metaCopyright','metaSoftware','metaDesc'];
+
+function saveMetaFieldPrefs(){
+  try{
+    const prefs = { mode: metaMode };
+    metaFieldIds.forEach(id => { prefs[id] = document.getElementById(id).value; });
+    localStorage.setItem(META_PREFS_KEY, JSON.stringify(prefs));
+  }catch(e){ /* storage unavailable — silently skip */ }
+}
+
+function loadMetaFieldPrefs(){
+  try{
+    const raw = localStorage.getItem(META_PREFS_KEY);
+    if(!raw) return;
+    const prefs = JSON.parse(raw);
+    metaFieldIds.forEach(id => {
+      if(typeof prefs[id] === 'string') document.getElementById(id).value = prefs[id];
+    });
+    if(prefs.mode === 'custom' || prefs.mode === 'strip'){
+      setMetaMode(prefs.mode, {skipSave:true});
+    }
+  }catch(e){ /* corrupt/unavailable storage — start fresh */ }
+}
+
+metaFieldIds.forEach(id=>{
+  document.getElementById(id).addEventListener('input', saveMetaFieldPrefs);
+});
+
+loadMetaFieldPrefs();
+
+// ---------- Named metadata presets (save/load/delete a whole set of fields) ----------
+const META_PRESETS_KEY = 'garageGradeMetaPresets';
+const metaPresetSelect = document.getElementById('metaPresetSelect');
+const metaPresetSaveBtn = document.getElementById('metaPresetSaveBtn');
+const metaPresetDeleteBtn = document.getElementById('metaPresetDeleteBtn');
+
+function loadMetaPresets(){
+  try{
+    const raw = localStorage.getItem(META_PRESETS_KEY);
+    if(!raw) return {};
+    const parsed = JSON.parse(raw);
+    return (parsed && typeof parsed === 'object') ? parsed : {};
+  }catch(e){ return {}; }
+}
+
+function saveMetaPresets(presets){
+  try{ localStorage.setItem(META_PRESETS_KEY, JSON.stringify(presets)); }
+  catch(e){ /* storage unavailable — silently skip */ }
+}
+
+function refreshMetaPresetSelect(selectName){
+  const presets = loadMetaPresets();
+  const names = Object.keys(presets).sort((a,b)=>a.localeCompare(b));
+  metaPresetSelect.innerHTML = '<option value="">— Load a saved preset —</option>' +
+    names.map(n=>`<option value="${escapeAttr(n)}">${escapeAttr(n)}</option>`).join('');
+  if(selectName && names.includes(selectName)) metaPresetSelect.value = selectName;
+  metaPresetDeleteBtn.disabled = !metaPresetSelect.value;
+}
+
+metaPresetSelect.addEventListener('change', ()=>{
+  const name = metaPresetSelect.value;
+  metaPresetDeleteBtn.disabled = !name;
+  if(!name) return;
+  const presets = loadMetaPresets();
+  const fields = presets[name];
+  if(!fields) return;
+  metaFieldIds.forEach(id=>{
+    if(typeof fields[id] === 'string') document.getElementById(id).value = fields[id];
+  });
+  saveMetaFieldPrefs();
+});
+
+metaPresetSaveBtn.addEventListener('click', ()=>{
+  const name = (prompt('Save current metadata as a preset named:', metaPresetSelect.value || '') || '').trim();
+  if(!name) return;
+  const presets = loadMetaPresets();
+  const fields = {};
+  metaFieldIds.forEach(id => { fields[id] = document.getElementById(id).value; });
+  presets[name] = fields;
+  saveMetaPresets(presets);
+  refreshMetaPresetSelect(name);
+});
+
+metaPresetDeleteBtn.addEventListener('click', ()=>{
+  const name = metaPresetSelect.value;
+  if(!name) return;
+  if(!confirm(`Delete the preset "${name}"?`)) return;
+  const presets = loadMetaPresets();
+  delete presets[name];
+  saveMetaPresets(presets);
+  refreshMetaPresetSelect();
+});
+
+refreshMetaPresetSelect();
 
 // ---------- Strip metadata (re-encode via canvas — this drops EXIF/GPS/etc) ----------
 function stripImageMetadata(file){
@@ -1336,22 +1499,39 @@ function crc32(bytes){
   return (crc ^ 0xFFFFFFFF) >>> 0;
 }
 
+// Same math as crc32() above, but sliced into chunks with a yield to the
+// browser between them so a big photo doesn't freeze the tab while it hashes.
+async function crc32Async(bytes){
+  let crc = 0xFFFFFFFF;
+  const CHUNK = 4_000_000;
+  for(let start = 0; start < bytes.length; start += CHUNK){
+    const end = Math.min(start + CHUNK, bytes.length);
+    for(let i = start; i < end; i++) crc = CRC_TABLE[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+    if(end < bytes.length) await new Promise(r => setTimeout(r, 0));
+  }
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
 function dosDateTime(date){
   const time = ((date.getHours() & 0x1F) << 11) | ((date.getMinutes() & 0x3F) << 5) | ((Math.floor(date.getSeconds()/2)) & 0x1F);
   const dosDate = (((date.getFullYear()-1980) & 0x7F) << 9) | (((date.getMonth()+1) & 0xF) << 5) | (date.getDate() & 0x1F);
   return {time, dosDate};
 }
 
-function createZip(files){
+// Async version of the zip writer below — same format, but awaits crc32Async
+// and yields between entries so building a zip of many/large photos doesn't
+// lock up the page. `onProgress(done, total)` lets the button show progress.
+async function createZipAsync(files, onProgress){
   const {time, dosDate} = dosDateTime(new Date());
   const localParts = [];
   const centralParts = [];
   let offset = 0;
+  let done = 0;
 
-  files.forEach(f=>{
+  for(const f of files){
     const nameBytes = new TextEncoder().encode(f.name);
     const data = f.data;
-    const crc = crc32(data);
+    const crc = await crc32Async(data);
     const size = data.length;
 
     const local = new Uint8Array(30 + nameBytes.length);
@@ -1359,7 +1539,7 @@ function createZip(files){
     lv.setUint32(0, 0x04034b50, true);
     lv.setUint16(4, 20, true);
     lv.setUint16(6, 0, true);
-    lv.setUint16(8, 0, true); // store, no compression
+    lv.setUint16(8, 0, true);
     lv.setUint16(10, time, true);
     lv.setUint16(12, dosDate, true);
     lv.setUint32(14, crc, true);
@@ -1393,7 +1573,10 @@ function createZip(files){
     centralParts.push(central);
 
     offset += local.length + data.length;
-  });
+    done++;
+    if(onProgress) onProgress(done, files.length);
+    await new Promise(r => setTimeout(r, 0));
+  }
 
   const centralStart = offset;
   const centralSize = centralParts.reduce((sum, c) => sum + c.length, 0);
@@ -1567,12 +1750,15 @@ metaDownloadBtn.addEventListener('click', async ()=>{
   metaDownloadBtn.disabled = true;
   metaClearBtn.disabled = true;
   const originalLabel = metaDownloadBtn.textContent;
-  metaDownloadBtn.textContent = 'Processing...';
 
   const customMeta = metaMode === 'custom' ? getCustomMetaValues() : null;
   const zipEntries = [];
   const usedNames = new Set();
+  const total = metaFiles.length;
+  let done = 0;
+
   for(const item of metaFiles){
+    metaDownloadBtn.textContent = `Processing ${done + 1}/${total}...`;
     try{
       const {blob, outType} = await stripImageMetadata(item.file);
       let arrBuf = await blob.arrayBuffer();
@@ -1594,10 +1780,18 @@ metaDownloadBtn.addEventListener('click', async ()=>{
     }catch(e){
       console.error('Failed to process metadata for', item.name, e);
     }
+    done++;
+    // Yield to the browser after every photo so the tab stays responsive
+    // instead of freezing while a big batch churns through canvas re-encoding.
+    await new Promise(r => setTimeout(r, 0));
   }
 
   if(zipEntries.length){
-    const zipBlob = createZip(zipEntries);
+    metaDownloadBtn.textContent = 'Zipping...';
+    await new Promise(r => setTimeout(r, 0));
+    const zipBlob = await createZipAsync(zipEntries, (i, tot)=>{
+      metaDownloadBtn.textContent = `Zipping ${i}/${tot}...`;
+    });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(zipBlob);
     a.download = 'clean-photos.zip';
