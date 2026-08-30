@@ -48,8 +48,8 @@
   }
 
   .stage{
-    display:flex;align-items:center;justify-content:center;
-    min-height:min(70vh,520px);padding:20px;position:relative;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    min-height:min(70vh,520px);padding:20px;position:relative;gap:14px;
     background:
       radial-gradient(circle at 50% 30%, #14161a 0%, #0a0b0d 70%);
   }
@@ -77,6 +77,31 @@
     font-size:11px;cursor:pointer;font-family:'JetBrains Mono',monospace;
   }
   .change-img:hover{color:var(--text);border-color:var(--amber);}
+
+  .batch-count{
+    width:100%;max-width:640px;font-size:11px;color:var(--text-dim);
+    font-family:'JetBrains Mono',monospace;text-align:left;display:none;
+  }
+  .batch-strip{
+    display:none;gap:8px;overflow-x:auto;width:100%;max-width:640px;padding:4px 2px 8px;
+  }
+  .batch-thumb{
+    position:relative;flex-shrink:0;width:64px;height:64px;border-radius:6px;overflow:hidden;
+    border:2px solid var(--line);cursor:pointer;background:#000;
+  }
+  .batch-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+  .batch-thumb.active{border-color:var(--amber);}
+  .batch-thumb .rm{
+    position:absolute;top:2px;right:2px;width:16px;height:16px;border-radius:50%;
+    background:rgba(10,11,13,.85);color:var(--text-dim);border:none;font-size:11px;line-height:16px;
+    cursor:pointer;padding:0;
+  }
+  .batch-thumb .rm:hover{color:var(--red);}
+  .batch-add{
+    flex-shrink:0;width:64px;height:64px;border-radius:6px;border:1.5px dashed var(--line);
+    display:flex;align-items:center;justify-content:center;color:var(--text-dim);cursor:pointer;font-size:22px;
+  }
+  .batch-add:hover{border-color:var(--amber);color:var(--amber);}
 
   .controls{padding:18px;}
   .section{margin-bottom:22px;}
@@ -264,15 +289,17 @@
   <div class="stage">
     <div class="drop" id="dropZone">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-      <div><b>Drop your best-frame photo</b></div>
-      <div class="hint">Screenshot from TikTok / any JPG or PNG</div>
+      <div><b>Drop your best-frame photos</b></div>
+      <div class="hint">Add up to ~20 at once — same edits apply to all</div>
     </div>
     <div class="canvas-wrap" id="canvasWrap">
       <span class="frame-label">PREVIEW</span>
       <canvas id="view"></canvas>
-      <button class="change-img" id="changeImg">Change photo</button>
+      <button class="change-img" id="changeImg">Add photos</button>
     </div>
-    <input type="file" id="fileInput" accept="image/*">
+    <div class="batch-count" id="batchCount"></div>
+    <div class="batch-strip" id="batchStrip"></div>
+    <input type="file" id="fileInput" accept="image/*" multiple>
   </div>
 
   <div class="controls">
@@ -392,7 +419,7 @@
     </div>
 
     <button class="reset-btn" id="resetBtn">Reset all edits</button>
-    <div class="footnote">4K upscale uses progressive resampling plus a sharpen pass — best for source photos under ~2000px on the long edge.</div>
+    <div class="footnote">4K upscale uses progressive resampling plus a sharpen pass — best for source photos under ~2000px on the long edge. When more than one photo is loaded, Export builds a ZIP with every photo edited the same way.</div>
   </div>
 </div>
 </div>
@@ -467,6 +494,13 @@ tabButtons.forEach(btn=>{
 
 let img = new Image();
 let hasImage = false;
+// Batch: every loaded photo lives here. `img` above always points at whichever
+// one is currently active in the preview canvas; edits (sliders/presets/crop/
+// text/logo) are shared global state and get applied to every photo on export.
+let images = []; // {id, file, img, name}
+let activeImageId = null;
+let imgIdSeq = 1;
+
 let ratio = 0; // 0 = original
 let state = {
   bright:0, contrast:0, sat:0, temp:0, clarity:0, vig:0,
@@ -479,35 +513,116 @@ let lastPreviewW = 1400, lastPreviewH = 1400;
 let textLayers = [];
 let textLayerIdSeq = 1;
 
-// ---------- Load image ----------
-function loadFile(file){
-  if(!file || !file.type.startsWith('image/')) return;
-  const reader = new FileReader();
-  reader.onload = e => {
-    img = new Image();
-    img.onload = () => {
-      hasImage = true;
-      dropZone.style.display = 'none';
-      canvasWrap.classList.add('active');
-      downloadBtn.disabled = false;
-      ratio = 0;
-      document.querySelectorAll('.ratio-btn').forEach(b=>b.classList.remove('active'));
-      document.querySelector('.ratio-btn[data-ratio="0"]').classList.add('active');
-      const nameField = document.getElementById('exportName');
-      if(nameField){
-        const base = file.name.replace(/\.[^./\\]+$/, '');
-        nameField.value = base || 'garage-grade-export';
-      }
-      render();
+// ---------- Load image(s) ----------
+function updateExportBtnLabel(){
+  downloadBtn.textContent = images.length > 1 ? `Export All (${images.length})` : 'Export';
+}
+
+function loadFiles(fileList){
+  const files = Array.from(fileList).filter(f=>f.type.startsWith('image/'));
+  if(!files.length) return;
+  const isFirstBatch = images.length === 0;
+
+  if(isFirstBatch){
+    dropZone.style.display = 'none';
+    canvasWrap.classList.add('active');
+    downloadBtn.disabled = false;
+    const nameField = document.getElementById('exportName');
+    if(nameField){
+      const base = files[0].name.replace(/\.[^./\\]+$/, '');
+      nameField.value = base || 'garage-grade-export';
+    }
+  }
+
+  files.forEach(file=>{
+    const reader = new FileReader();
+    reader.onload = e => {
+      const im = new Image();
+      im.onload = () => {
+        const id = imgIdSeq++;
+        images.push({id, file, img: im, name: file.name});
+        if(activeImageId === null){
+          setActiveImage(id);
+        }
+        renderThumbStrip();
+        updateExportBtnLabel();
+      };
+      im.src = e.target.result;
     };
-    img.src = e.target.result;
-  };
-  reader.readAsDataURL(file);
+    reader.readAsDataURL(file);
+  });
+}
+
+function setActiveImage(id){
+  const item = images.find(i=>i.id === id);
+  if(!item) return;
+  activeImageId = id;
+  img = item.img;
+  hasImage = true;
+  ratio = ratio; // keep current crop/adjust settings — batch edits stay shared
+  render();
+  renderThumbStrip();
+}
+
+function removeImage(id){
+  images = images.filter(i=>i.id !== id);
+  if(activeImageId === id){
+    activeImageId = null;
+    if(images.length){
+      setActiveImage(images[0].id);
+    } else {
+      hasImage = false;
+      canvasWrap.classList.remove('active');
+      dropZone.style.display = '';
+      downloadBtn.disabled = true;
+      ctx.clearRect(0,0,view.width,view.height);
+    }
+  }
+  renderThumbStrip();
+  updateExportBtnLabel();
+}
+
+function renderThumbStrip(){
+  const strip = document.getElementById('batchStrip');
+  const countLabel = document.getElementById('batchCount');
+  if(images.length <= 1){
+    strip.style.display = 'none';
+    countLabel.style.display = 'none';
+    strip.innerHTML = '';
+    return;
+  }
+  strip.style.display = 'flex';
+  countLabel.style.display = 'block';
+  countLabel.textContent = `${images.length} photos loaded — same edits apply to all`;
+  strip.innerHTML = '';
+  images.forEach(item=>{
+    const div = document.createElement('div');
+    div.className = 'batch-thumb' + (item.id === activeImageId ? ' active' : '');
+    div.innerHTML = `<img src="${item.img.src}"><button class="rm" type="button" data-rm="${item.id}">&times;</button>`;
+    div.addEventListener('click', e=>{
+      if(e.target.closest('[data-rm]')) return;
+      setActiveImage(item.id);
+    });
+    strip.appendChild(div);
+  });
+  const addTile = document.createElement('div');
+  addTile.className = 'batch-add';
+  addTile.textContent = '+';
+  addTile.title = 'Add more photos';
+  addTile.addEventListener('click', ()=>fileInput.click());
+  strip.appendChild(addTile);
+
+  strip.querySelectorAll('[data-rm]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      removeImage(parseInt(btn.dataset.rm, 10));
+    });
+  });
 }
 
 dropZone.addEventListener('click', ()=>fileInput.click());
 changeImg.addEventListener('click', ()=>fileInput.click());
-fileInput.addEventListener('change', e => loadFile(e.target.files[0]));
+fileInput.addEventListener('change', e => { loadFiles(e.target.files); fileInput.value = ''; });
 
 ['dragenter','dragover'].forEach(evt=>{
   dropZone.addEventListener(evt, e=>{e.preventDefault();dropZone.classList.add('drag');});
@@ -517,7 +632,7 @@ fileInput.addEventListener('change', e => loadFile(e.target.files[0]));
 });
 dropZone.addEventListener('drop', e=>{
   e.preventDefault();
-  loadFile(e.dataTransfer.files[0]);
+  loadFiles(e.dataTransfer.files);
 });
 
 // ---------- Presets ----------
@@ -745,6 +860,18 @@ document.getElementById('resetBtn').addEventListener('click', ()=>{
   syncSliders();
   document.getElementById('panXRow').style.display='none';
   document.getElementById('panYRow').style.display='none';
+
+  // clear the whole batch too
+  images = [];
+  activeImageId = null;
+  hasImage = false;
+  canvasWrap.classList.remove('active');
+  dropZone.style.display = '';
+  ctx.clearRect(0,0,view.width,view.height);
+  downloadBtn.disabled = true;
+  renderThumbStrip();
+  updateExportBtnLabel();
+
   render();
 });
 
@@ -935,56 +1062,104 @@ function sharpen(imageData, amt){
   return new ImageData(out, w, h);
 }
 
-downloadBtn.addEventListener('click', ()=>{
-  if(!hasImage) return;
-  downloadBtn.textContent = 'Rendering...';
+// Builds one fully-rendered export canvas (crop → filters → clarity/temp/
+// vignette → optional 4K upscale + sharpen → logo → text) for a given source
+// image. Temporarily points the shared `img`/getCropRect at that source so
+// every existing draw* helper (which all read the shared `state`) works
+// unchanged — this is what lets one settings panel drive a 20-photo batch.
+function buildFullExportCanvas(sourceImg){
+  const prevImg = img;
+  img = sourceImg;
+
+  const {sx, sy, sw, sh} = getCropRect();
+  const full = document.createElement('canvas');
+  full.width = Math.round(sw);
+  full.height = Math.round(sh);
+  const fctx = full.getContext('2d');
+
+  fctx.filter = applyFilterString();
+  fctx.drawImage(sourceImg, sx, sy, sw, sh, 0, 0, full.width, full.height);
+  fctx.filter = 'none';
+
+  if(state.clarity > 0) drawClarity(fctx, full.width, full.height, full);
+  drawTemp(fctx, full.width, full.height);
+  drawVignette(fctx, full.width, full.height);
+
+  const wasUpscaled = exportSize === '4k';
+  let output = wasUpscaled ? upscaleCanvas(full, 3840) : full;
+  const octx = output.getContext('2d');
+
+  const sharpenAmt = wasUpscaled ? 0.28 : 0;
+  if(sharpenAmt > 0){
+    try{
+      const id = octx.getImageData(0,0,output.width, output.height);
+      const sharpened = sharpen(id, sharpenAmt);
+      octx.putImageData(sharpened, 0, 0);
+    }catch(e){ /* skip sharpen if it fails on very large images */ }
+  }
+
+  drawLogo(octx, output.width, output.height);
+  drawTextLayers(octx, output.width, output.height);
+
+  img = prevImg;
+  return output;
+}
+
+downloadBtn.addEventListener('click', async ()=>{
+  if(!images.length) return;
   downloadBtn.disabled = true;
+  const originalLabel = downloadBtn.textContent;
 
-  setTimeout(()=>{
-    const {sx, sy, sw, sh} = getCropRect();
-    const full = document.createElement('canvas');
-    full.width = Math.round(sw);
-    full.height = Math.round(sh);
-    const fctx = full.getContext('2d');
-
-    fctx.filter = applyFilterString();
-    fctx.drawImage(img, sx, sy, sw, sh, 0, 0, full.width, full.height);
-    fctx.filter = 'none';
-
-    if(state.clarity > 0) drawClarity(fctx, full.width, full.height, full);
-    drawTemp(fctx, full.width, full.height);
-    drawVignette(fctx, full.width, full.height);
-
-    // upscale to 4K (long edge 3840px) if requested, before sharpening/watermark
-    const wasUpscaled = exportSize === '4k';
-    let output = wasUpscaled ? upscaleCanvas(full, 3840) : full;
-    const octx = output.getContext('2d');
-
-    // sharpen pass — kept mild and proportional so export matches the preview.
-    // Only compensate for the softness introduced by upscaling; don't stack
-    // extra sharpening on top of a photo that wasn't resized at all.
-    const sharpenAmt = wasUpscaled ? 0.28 : 0;
-    if(sharpenAmt > 0){
-      try{
-        const id = octx.getImageData(0,0,output.width, output.height);
-        const sharpened = sharpen(id, sharpenAmt);
-        octx.putImageData(sharpened, 0, 0);
-      }catch(e){ /* skip sharpen if it fails on very large images */ }
-    }
-
-    drawLogo(octx, output.width, output.height);
-    drawTextLayers(octx, output.width, output.height);
-
+  // Single photo — same behavior as before, one PNG download.
+  if(images.length === 1){
+    downloadBtn.textContent = 'Rendering...';
+    await new Promise(r=>setTimeout(r, 50));
+    const output = buildFullExportCanvas(images[0].img);
     output.toBlob(blob=>{
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       const rawName = (document.getElementById('exportName').value || '').trim().replace(/[\\/:*?"<>|]/g, '_');
       a.download = (rawName || 'garage-grade-export') + '.png';
       a.click();
-      downloadBtn.textContent = 'Export';
+      updateExportBtnLabel();
       downloadBtn.disabled = false;
     }, 'image/png', 0.95);
-  }, 50);
+    return;
+  }
+
+  // Batch — render every loaded photo with the same edits, zip them up.
+  const zipEntries = [];
+  const usedNames = new Set();
+  for(let i=0;i<images.length;i++){
+    downloadBtn.textContent = `Rendering ${i+1}/${images.length}...`;
+    await new Promise(r=>setTimeout(r, 0));
+    const item = images[i];
+    const output = buildFullExportCanvas(item.img);
+    const blob = await new Promise(res=>output.toBlob(res, 'image/png', 0.95));
+    const buf = new Uint8Array(await blob.arrayBuffer());
+    const base = splitName(item.name).base.replace(/[\\/:*?"<>|]/g, '_') || 'photo';
+    let finalName = `${base}_edited.png`;
+    let dupe = 1;
+    while(usedNames.has(finalName)){
+      finalName = `${base}_edited_${dupe}.png`;
+      dupe++;
+    }
+    usedNames.add(finalName);
+    zipEntries.push({name: finalName, data: buf});
+  }
+
+  downloadBtn.textContent = 'Zipping...';
+  await new Promise(r=>setTimeout(r, 0));
+  const zipBlob = await createZipAsync(zipEntries, (i, tot)=>{
+    downloadBtn.textContent = `Zipping ${i}/${tot}...`;
+  });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(zipBlob);
+  const rawName = (document.getElementById('exportName').value || '').trim().replace(/[\\/:*?"<>|]/g, '_');
+  a.download = (rawName || 'garage-grade-export') + '.zip';
+  a.click();
+  updateExportBtnLabel();
+  downloadBtn.disabled = false;
 });
 
 // ===================== Metadata Remover =====================
